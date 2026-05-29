@@ -217,6 +217,7 @@ function App() {
   const [adminDate, setAdminDate] = React.useState(formatDate(today));
   const [calView, setCalView] = React.useState("day"); // "day" | "week"
   const [bookingSearch, setBookingSearch] = React.useState("");
+  const [showDayClose, setShowDayClose] = React.useState(false);
   const [form, setForm] = React.useState({ name:"", phone:"", email:"", service:null, stylist:null, time:"", note:"" });
   const [bookingDone, setBookingDone] = React.useState(false);
   const [loginEmail, setLoginEmail] = React.useState("");
@@ -1496,12 +1497,19 @@ function App() {
                   </div>
                 </div>
 
-                {/* NAGY ÚJ FOGLALÁS GOMB */}
-                <button
-                  onClick={() => openQuickBooking(adminDate, "", stylists[0]?.id)}
-                  style={{...S.btn, width:"100%", padding:"14px", marginBottom:"14px", fontSize:"13px"}}>
-                  + Új foglalás felvétele
-                </button>
+                {/* NAGY ÚJ FOGLALÁS GOMB + NAPI ZÁRÁS */}
+                <div style={{display:"flex", gap:"8px", marginBottom:"14px"}}>
+                  <button
+                    onClick={() => openQuickBooking(adminDate, "", stylists[0]?.id)}
+                    style={{...S.btn, flex:1, padding:"14px", fontSize:"13px"}}>
+                    + Új foglalás
+                  </button>
+                  <button
+                    onClick={() => setShowDayClose(true)}
+                    style={{...S.btnSec, padding:"14px 16px", fontSize:"13px", whiteSpace:"nowrap"}}>
+                    📊 Napi zárás
+                  </button>
+                </div>
 
                 {/* KERESÉS */}
                 <div style={{marginBottom:"14px"}}>
@@ -2698,6 +2706,92 @@ function App() {
       })()}
 
       {/* QUICK BOOKING MODAL */}
+      {/* NAPI ZÁRÁS MODAL */}
+      {showDayClose && (() => {
+        const dayBookings = bookings.filter(b => b.date === adminDate);
+        const completed = dayBookings.filter(b => b.status === "completed");
+        const noshows = dayBookings.filter(b => b.status === "noshow");
+        const upcoming = dayBookings.filter(b => b.status === "confirmed");
+        const totalRev = completed.reduce((s,b) => s + (b.paidPrice ?? b.price), 0);
+        const cashRev = completed.filter(b => b.paymentMethod === "cash").reduce((s,b) => s + (b.paidPrice ?? b.price), 0);
+        const cardRev = completed.filter(b => b.paymentMethod === "card").reduce((s,b) => s + (b.paidPrice ?? b.price), 0);
+        const visibleStylists = isStylist ? stylists.filter(s => s.id === myStylistId) : stylists;
+        return (
+          <div onClick={() => setShowDayClose(false)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
+            <div onClick={e => e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"460px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"4px"}}>
+                <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"22px"}}>📊 Napi zárás</div>
+                <button onClick={() => setShowDayClose(false)} style={{background:"none", border:"none", color:C.sub, fontSize:"22px", cursor:"pointer"}}>×</button>
+              </div>
+              <div style={{fontSize:"12px", color:C.sub, marginBottom:"16px"}}>{parseDate(adminDate).toLocaleDateString("hu-HU",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
+
+              {/* Fő bevétel */}
+              <div style={{background:C.accentSoft, border:`1px solid ${C.accentDark}`, borderRadius:"8px", padding:"16px", marginBottom:"12px", textAlign:"center"}}>
+                <div style={{fontSize:"11px", color:C.sub, letterSpacing:"0.1em"}}>{isStylist ? "SAJÁT BEVÉTEL MA" : "ÖSSZES BEVÉTEL MA"}</div>
+                <div style={{fontSize:"32px", fontWeight:"800", marginTop:"4px"}}>{totalRev.toLocaleString()} Ft</div>
+                <div style={{fontSize:"12px", color:C.textDim, marginTop:"2px"}}>{completed.length} elvégzett vágás</div>
+              </div>
+
+              {/* Fizetési bontás */}
+              <div style={{display:"flex", gap:"8px", marginBottom:"12px"}}>
+                <div style={{flex:1, background:C.surfaceAlt, borderRadius:"6px", padding:"12px", textAlign:"center"}}>
+                  <div style={{fontSize:"10px", color:C.sub}}>💵 KÉSZPÉNZ</div>
+                  <div style={{fontSize:"17px", fontWeight:"700", marginTop:"2px"}}>{cashRev.toLocaleString()} Ft</div>
+                </div>
+                <div style={{flex:1, background:C.surfaceAlt, borderRadius:"6px", padding:"12px", textAlign:"center"}}>
+                  <div style={{fontSize:"10px", color:C.sub}}>💳 KÁRTYA</div>
+                  <div style={{fontSize:"17px", fontWeight:"700", marginTop:"2px"}}>{cardRev.toLocaleString()} Ft</div>
+                </div>
+              </div>
+
+              {/* Státusz összesítő */}
+              <div style={{display:"flex", gap:"8px", marginBottom:"16px"}}>
+                <div style={{flex:1, background:C.surfaceAlt, borderRadius:"6px", padding:"10px", textAlign:"center"}}>
+                  <div style={{fontSize:"18px", fontWeight:"700", color:C.success}}>{completed.length}</div>
+                  <div style={{fontSize:"9px", color:C.sub}}>KÉSZ</div>
+                </div>
+                <div style={{flex:1, background:C.surfaceAlt, borderRadius:"6px", padding:"10px", textAlign:"center"}}>
+                  <div style={{fontSize:"18px", fontWeight:"700", color:C.accent}}>{upcoming.length}</div>
+                  <div style={{fontSize:"9px", color:C.sub}}>HÁTRALÉVŐ</div>
+                </div>
+                <div style={{flex:1, background:C.surfaceAlt, borderRadius:"6px", padding:"10px", textAlign:"center"}}>
+                  <div style={{fontSize:"18px", fontWeight:"700", color:C.danger}}>{noshows.length}</div>
+                  <div style={{fontSize:"9px", color:C.sub}}>NO-SHOW</div>
+                </div>
+              </div>
+
+              {/* Barberenkénti bontás (csak adminnál) */}
+              {!isStylist && (
+                <div style={{marginBottom:"12px"}}>
+                  <div style={{fontSize:"11px", color:C.sub, letterSpacing:"0.1em", marginBottom:"8px"}}>BARBERENKÉNT</div>
+                  {visibleStylists.map(s => {
+                    const sComp = completed.filter(b => b.stylistId === s.id);
+                    const sRev = sComp.reduce((sum,b) => sum + (b.paidPrice ?? b.price), 0);
+                    const sMin = sComp.reduce((sum,b) => sum + (b.duration || 0), 0);
+                    if (sComp.length === 0) return null;
+                    return (
+                      <div key={s.id} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", background:C.surfaceAlt, borderRadius:"6px", marginBottom:"4px"}}>
+                        <div style={{display:"flex", alignItems:"center", gap:"8px"}}>
+                          <div style={{width:"10px", height:"10px", borderRadius:"50%", background:s.color}}></div>
+                          <span style={{fontSize:"13px", fontWeight:"600"}}>{s.name}</span>
+                        </div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:"13px", fontWeight:"700"}}>{sRev.toLocaleString()} Ft</div>
+                          <div style={{fontSize:"10px", color:C.sub}}>{sComp.length} vágás · {Math.floor(sMin/60)}h {sMin%60}p</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {completed.length === 0 && <div style={{fontSize:"12px", color:C.muted, textAlign:"center", padding:"10px"}}>Még nincs lezárt foglalás ma.</div>}
+                </div>
+              )}
+
+              <button style={{...S.btn, width:"100%"}} onClick={() => setShowDayClose(false)}>Bezárás</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {quickBooking && (
         <div onClick={() => setQuickBooking(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
           <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"400px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
