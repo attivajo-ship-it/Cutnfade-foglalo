@@ -186,6 +186,7 @@ function App() {
     depositAmount: 2000,
     confirmMoves: true,
     autoDeleteDays: 0, // 0 = kikapcsolva
+    theme: "mono", // szín-téma
   }));
 
   const [stylists, setStylists] = React.useState(() => load("cnf_stylists", [
@@ -758,24 +759,39 @@ function App() {
   const topClients = Object.entries(completedBookings.reduce((m,b)=>{m[b.clientPhone]=(m[b.clientPhone]||0)+1;return m;},{})).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([p,c])=>({name:clients.find(cl=>cl.phone===p)?.name||p,count:c,phone:p}));
 
   // CUT N' FADE STÍLUS: fekete-fehér, monokróm
+  // === SZÍN-TÉMÁK ===
+  const THEMES = {
+    mono:    { name:"Monokróm", metal:false, bg:"#0a0a0a", surface:"#141414", surfaceAlt:"#1c1c1c", border:"#2a2a2a", text:"#f5f5f5", sub:"#787878", accent:"#f5f5f5", accentText:"#0a0a0a", m:["#f5f5f5","#c8c8c8","#ffffff","#a0a0a0","#e0e0e0"] },
+    chrome:  { name:"Króm / Ezüst", metal:true, bg:"#0c0d0f", surface:"#16181c", surfaceAlt:"#1e2126", border:"#363a42", text:"#eef0f4", sub:"#9098a4", accent:"#c8ccd4", accentText:"#0c0d0f", m:["#f4f5f7","#b8bcc6","#e2e4ea","#8e939e","#d4d7de"] },
+    gold:    { name:"Arany fém", metal:true, bg:"#0d0b07", surface:"#16130c", surfaceAlt:"#1f1a10", border:"#3a2f1a", text:"#f5ecd8", sub:"#9a8a6a", accent:"#d4af6a", accentText:"#0d0b07", m:["#f8e4a0","#c89a3a","#f0d278","#a87e28","#e8c86a"] },
+    steel:   { name:"Acélkék fém", metal:true, bg:"#0a0f17", surface:"#0f1722", surfaceAlt:"#16202e", border:"#243447", text:"#e8f0f8", sub:"#7a91a8", accent:"#5aa8e0", accentText:"#0a0f17", m:["#bce0f8","#3a7ec0","#88c0e8","#2a6ab0","#7ab0e0"] },
+    emerald: { name:"Smaragd fém", metal:true, bg:"#08120d", surface:"#0d1a13", surfaceAlt:"#12241a", border:"#1e3a2a", text:"#e0f5ea", sub:"#6f9a82", accent:"#3dbb84", accentText:"#08120d", m:["#a0f0c8","#1e8a5a","#6ed0a0","#147048","#5ec890"] },
+    burgundy:{ name:"Burgundi fém", metal:true, bg:"#120a0c", surface:"#1c1012", surfaceAlt:"#261619", border:"#3e2228", text:"#f8e8eb", sub:"#a87a82", accent:"#d0556e", accentText:"#ffffff", m:["#f0a0b0","#a02a40","#d87890","#882030","#d05a70"] },
+    bronze:  { name:"Bronz fém", metal:true, bg:"#120d09", surface:"#1c140d", surfaceAlt:"#261b11", border:"#3e2a1a", text:"#f5e8db", sub:"#a8896f", accent:"#cc8552", accentText:"#120d09", m:["#f0b890","#a85a2a","#dc9868","#8a4820","#d08858"] },
+  };
+  const TH = THEMES[settings.theme] || THEMES.mono;
+  const metalGrad = TH.metal ? `linear-gradient(135deg, ${TH.m[0]} 0%, ${TH.m[1]} 30%, ${TH.m[2]} 50%, ${TH.m[3]} 70%, ${TH.m[4]} 100%)` : null;
+
   const C = {
-    bg: "#0a0a0a",
-    surface: "#141414",
-    surfaceAlt: "#1c1c1c",
-    text: "#f5f5f5",
-    textDim: "#a8a8a8",
-    sub: "#787878",
+    bg: TH.bg,
+    surface: TH.surface,
+    surfaceAlt: TH.surfaceAlt,
+    text: TH.text,
+    textDim: TH.sub,
+    sub: TH.sub,
     muted: "#505050",
-    border: "#2a2a2a",
-    borderLight: "#1f1f1f",
-    accent: "#f5f5f5", // fehér
-    accentText: "#0a0a0a",
-    accentSoft: "#1f1f1f",
-    accentDark: "#3a3a3a",
+    border: TH.border,
+    borderLight: TH.border,
+    accent: TH.accent,
+    accentText: TH.accentText,
+    accentSoft: TH.surfaceAlt,
+    accentDark: TH.border,
     danger: "#dc4a3d",
     success: "#7cb87c",
     warning: "#d49a3a",
     info: "#a8a8a8",
+    metalGrad, // fémes gradient vagy null
+    isMetal: TH.metal,
   };
 
   const S = {
@@ -788,7 +804,7 @@ function App() {
     cardHero: { background: `linear-gradient(135deg, ${C.surface} 0%, ${C.surfaceAlt} 100%)`, borderRadius: "12px", padding: "32px 24px", marginBottom: "16px", border: `1px solid ${C.border}`, textAlign:"center", position:"relative", overflow:"hidden" },
     label: { fontSize: "10px", fontWeight: "700", color: C.accent, textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: "12px", display:"block" },
     input: { width: "100%", padding: "12px 14px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surfaceAlt, fontSize: "14px", color: C.text, outline: "none", boxSizing: "border-box", fontFamily: "inherit" },
-    btn: { background: C.accent, color: C.accentText, border: "none", borderRadius: "6px", padding: "13px 24px", fontSize: "13px", fontWeight: "700", cursor: "pointer", letterSpacing: "0.1em", textTransform:"uppercase" },
+    btn: { background: C.metalGrad || C.accent, color: C.accentText, border: "none", borderRadius: "6px", padding: "13px 24px", fontSize: "13px", fontWeight: "700", cursor: "pointer", letterSpacing: "0.1em", textTransform:"uppercase", boxShadow: C.isMetal ? "inset 0 1px 2px rgba(255,255,255,0.45), inset 0 -2px 4px rgba(0,0,0,0.2), 0 3px 10px rgba(0,0,0,0.35)" : "none" },
     btnSec: { background: "transparent", color: C.text, border: `1px solid ${C.border}`, borderRadius: "6px", padding: "9px 14px", fontSize: "12px", fontWeight: "600", cursor: "pointer", letterSpacing:"0.05em" },
     btnDanger: { background: "transparent", color: C.danger, border: `1px solid ${C.danger}`, borderRadius: "6px", padding: "9px 14px", fontSize: "12px", fontWeight: "600", cursor: "pointer" },
     btnIcon: { background: "transparent", border: "none", color: C.textDim, cursor: "pointer", padding: "4px 6px", fontSize: "14px", borderRadius: "4px" },
@@ -819,6 +835,11 @@ function App() {
         .drop-zone.drag-over { background: ${C.accentSoft} !important; }
         .hero-line { background: linear-gradient(90deg, transparent, ${C.accent}, transparent); height: 1px; }
         select { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23a8a39a' viewBox='0 0 16 16'%3e%3cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+        ${C.isMetal ? `
+        .cnf-shine { position: relative; overflow: hidden; }
+        .cnf-shine::after { content:""; position:absolute; top:0; left:-60%; width:40%; height:100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent); transform: skewX(-20deg); animation: cnfShine 3.8s ease-in-out infinite; pointer-events:none; }
+        @keyframes cnfShine { 0% { left:-60%; } 45%,100% { left:140%; } }
+        ` : ``}
       `}</style>
 
       {/* HEADER */}
@@ -831,14 +852,31 @@ function App() {
                 <stop offset="0%" stopColor="#ffffff"/>
                 <stop offset="100%" stopColor="#6a6a6a"/>
               </linearGradient>
+              <linearGradient id="cnfMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor={TH.m[0]}/>
+                <stop offset="30%" stopColor={TH.m[1]}/>
+                <stop offset="50%" stopColor={TH.m[2]}/>
+                <stop offset="70%" stopColor={TH.m[3]}/>
+                <stop offset="100%" stopColor={TH.m[4]}/>
+              </linearGradient>
             </defs>
-            <circle cx="50" cy="50" r="47" fill="#0a0a0a" stroke="#f5f5f5" strokeWidth="2.5"/>
-            <circle cx="50" cy="50" r="41" fill="none" stroke="#333" strokeWidth="1"/>
-            <text x="50" y="62" fill="url(#cnfFade)" fontSize="30" fontWeight="bold" textAnchor="middle" fontFamily="Georgia, 'Playfair Display', serif" letterSpacing="1">CNF</text>
+            {C.isMetal ? (
+              <>
+                <circle cx="50" cy="50" r="47" fill="url(#cnfMetal)" stroke={TH.m[2]} strokeWidth="2"/>
+                <circle cx="50" cy="50" r="41" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
+                <text x="50" y="62" fill={C.accentText} fontSize="30" fontWeight="bold" textAnchor="middle" fontFamily="Georgia, 'Playfair Display', serif" letterSpacing="1">CNF</text>
+              </>
+            ) : (
+              <>
+                <circle cx="50" cy="50" r="47" fill="#0a0a0a" stroke="#f5f5f5" strokeWidth="2.5"/>
+                <circle cx="50" cy="50" r="41" fill="none" stroke="#333" strokeWidth="1"/>
+                <text x="50" y="62" fill="url(#cnfFade)" fontSize="30" fontWeight="bold" textAnchor="middle" fontFamily="Georgia, 'Playfair Display', serif" letterSpacing="1">CNF</text>
+              </>
+            )}
           </svg>
           {/* Felirat */}
           <div>
-            <div style={{fontSize:"22px", fontWeight:"700", color:"#f5f5f5", fontFamily:"Georgia, 'Playfair Display', serif", letterSpacing:"0.02em", lineHeight:1.1}}>CNF Foglaló</div>
+            <div style={{fontSize:"22px", fontWeight:"700", color: C.text, fontFamily:"Georgia, 'Playfair Display', serif", letterSpacing:"0.02em", lineHeight:1.1}}>CNF Foglaló</div>
             <div style={{fontSize:"10px", color: C.sub, marginTop:"3px", letterSpacing:"0.15em", textTransform:"uppercase"}}>Időpontfoglaló rendszer</div>
           </div>
         </div>
@@ -1129,7 +1167,7 @@ function App() {
               <input style={S.input} placeholder={T.note} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} />
             </div>
 
-            <button style={{...S.btn, width:"100%", padding:"16px", fontSize:"14px", opacity: (!form.name || !form.phone || !form.email || !form.time || !form.stylist || !form.service || getClientStatus(form.phone).blocked) ? 0.3 : 1}}
+            <button className={C.isMetal ? "cnf-shine" : ""} style={{...S.btn, width:"100%", padding:"16px", fontSize:"14px", opacity: (!form.name || !form.phone || !form.email || !form.time || !form.stylist || !form.service || getClientStatus(form.phone).blocked) ? 0.3 : 1}}
               onClick={handleBook} disabled={!form.name || !form.phone || !form.email || !form.time || !form.stylist || !form.service || getClientStatus(form.phone).blocked}>
               {getClientStatus(form.phone).blocked ? T.bookingNotPossible : T.confirmBooking}
             </button>
@@ -2470,6 +2508,34 @@ function App() {
                     ]);
                     showToast("Barberek visszaállítva");
                   }}>🔄 Barberek visszaállítása</button>
+                </div>
+
+                <div style={{...S.card}}>
+                  <span style={S.label}>🎨 Megjelenés · Szín-téma</span>
+                  <div style={{fontSize:"12px", color:C.textDim, marginBottom:"14px"}}>
+                    Válassz a rendszer fémes szín-témái közül. A fémes témákon a felület polírozott fém hatású.
+                  </div>
+                  <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(140px, 1fr))", gap:"8px"}}>
+                    {Object.entries(THEMES).map(([key, t]) => {
+                      const active = (settings.theme || "mono") === key;
+                      const sw = t.metal
+                        ? `linear-gradient(135deg, ${t.m[0]}, ${t.m[1]}, ${t.m[2]}, ${t.m[3]})`
+                        : t.accent;
+                      return (
+                        <button key={key} onClick={() => { setSettings({...settings, theme: key}); showToast(`Téma: ${t.name}`); }}
+                          style={{
+                            display:"flex", alignItems:"center", gap:"10px", padding:"10px 12px", borderRadius:"8px", cursor:"pointer",
+                            background: active ? C.surfaceAlt : "transparent",
+                            border: active ? `2px solid ${t.accent}` : `1px solid ${C.border}`,
+                            color: C.text, textAlign:"left",
+                          }}>
+                          <span style={{width:"22px", height:"22px", borderRadius:"50%", background:sw, flexShrink:0, boxShadow: t.metal ? "inset 0 1px 2px rgba(255,255,255,0.5), inset 0 -1px 2px rgba(0,0,0,0.3)" : "none", border:"1px solid rgba(255,255,255,0.15)"}}></span>
+                          <span style={{fontSize:"12px", fontWeight: active ? "700" : "500"}}>{t.name}</span>
+                          {active && <span style={{marginLeft:"auto", color:t.accent, fontSize:"13px"}}>✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div style={{...S.card}}>
