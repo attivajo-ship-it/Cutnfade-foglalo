@@ -822,19 +822,24 @@ function App() {
 
       {/* HEADER */}
       <div style={S.header}>
-        <div>
-          <svg width="200" height="58" viewBox="0 0 300 90" style={{display:"block"}}>
+        <div style={{display:"flex", alignItems:"center", gap:"12px"}}>
+          {/* CNF kör ikon */}
+          <svg width="48" height="48" viewBox="0 0 100 100" style={{display:"block", flexShrink:0}}>
             <defs>
-              <linearGradient id="hdrFade" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id="cnfFade" x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor="#ffffff"/>
-                <stop offset="55%" stopColor="#cfcfcf"/>
-                <stop offset="100%" stopColor="#5a5a5a"/>
+                <stop offset="100%" stopColor="#6a6a6a"/>
               </linearGradient>
             </defs>
-            <text x="150" y="38" fill="#ffffff" fontSize="34" fontWeight="bold" textAnchor="middle" fontFamily="Georgia, 'Playfair Display', serif" letterSpacing="1">CUT N'</text>
-            <text x="150" y="76" fill="url(#hdrFade)" fontSize="38" fontWeight="bold" textAnchor="middle" fontStyle="italic" fontFamily="Georgia, 'Playfair Display', serif" letterSpacing="2">FADE</text>
+            <circle cx="50" cy="50" r="47" fill="#0a0a0a" stroke="#f5f5f5" strokeWidth="2.5"/>
+            <circle cx="50" cy="50" r="41" fill="none" stroke="#333" strokeWidth="1"/>
+            <text x="50" y="62" fill="url(#cnfFade)" fontSize="30" fontWeight="bold" textAnchor="middle" fontFamily="Georgia, 'Playfair Display', serif" letterSpacing="1">CNF</text>
           </svg>
-          <div style={{fontSize:"10px", color: C.sub, marginTop:"4px", letterSpacing:"0.15em", textTransform:"uppercase"}}>Barbershop · Nyíregyháza</div>
+          {/* Felirat */}
+          <div>
+            <div style={{fontSize:"22px", fontWeight:"700", color:"#f5f5f5", fontFamily:"Georgia, 'Playfair Display', serif", letterSpacing:"0.02em", lineHeight:1.1}}>CNF Foglaló</div>
+            <div style={{fontSize:"10px", color: C.sub, marginTop:"3px", letterSpacing:"0.15em", textTransform:"uppercase"}}>Időpontfoglaló rendszer</div>
+          </div>
         </div>
         <div style={{display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap"}}>
           {/* Nyelvváltó - csak a vendég oldalon */}
