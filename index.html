@@ -313,6 +313,86 @@ function App() {
     return () => { cancelled = true; };
   }, []);
 
+  // ===== FOGLALÁS SZINKRON (3b lépés) =====
+  // A polling épp tölt? (ilyenkor ne küldjük vissza amit letöltöttünk)
+  const syncingRef = React.useRef(false);
+  const prevExtIdsRef = React.useRef(null);
+  const bookingsRef = React.useRef(bookings);
+  React.useEffect(() => { bookingsRef.current = bookings; }, [bookings]);
+
+  // Helyi foglalás -> adatbázis sor
+  function bookingToRow(b) {
+    return {
+      salon_id: salonId,
+      ext_id: String(b.id),
+      date: b.date,
+      time: b.time,
+      status: b.status || "confirmed",
+      raw: b, // a teljes helyi objektum
+    };
+  }
+
+  // Foglalások szinkronizálása a Supabase-be (upsert + törlés)
+  async function syncBookingsUp(list) {
+    if (!sb || !salonId) return;
+    try {
+      // 1) Upsert (beszúr vagy frissít) minden foglalást
+      if (list.length > 0) {
+        const rows = list.map(bookingToRow);
+        const { error } = await sb.from("bookings").upsert(rows, { onConflict: "salon_id,ext_id" });
+        if (error) throw error;
+      }
+      // 2) Törlés: ami eltűnt a helyi listából, töröljük a DB-ből is
+      const prev = prevExtIdsRef.current;
+      const currentIds = new Set(list.map(b => String(b.id)));
+      if (prev) {
+        const removed = [...prev].filter(id => !currentIds.has(id));
+        if (removed.length > 0) {
+          const { error } = await sb.from("bookings").delete().eq("salon_id", salonId).in("ext_id", removed);
+          if (error) throw error;
+        }
+      }
+      prevExtIdsRef.current = currentIds;
+    } catch (err) {
+      console.error("Szinkron (fel) hiba:", err);
+    }
+  }
+
+  // Foglalások letöltése a Supabase-ből
+  async function fetchBookingsDown() {
+    if (!sb || !salonId) return;
+    try {
+      const { data, error } = await sb.from("bookings").select("raw, ext_id").eq("salon_id", salonId);
+      if (error) throw error;
+      const downloaded = (data || []).map(r => r.raw).filter(Boolean);
+      // MIGRÁCIÓ: ha a DB üres, de van helyi adat -> felküldjük, nem írjuk felül
+      if (downloaded.length === 0 && bookingsRef.current.length > 0) {
+        await syncBookingsUp(bookingsRef.current);
+        return;
+      }
+      syncingRef.current = true; // jelezzük: ez letöltésből jön, ne küldjük vissza
+      prevExtIdsRef.current = new Set(downloaded.map(b => String(b.id)));
+      setBookings(downloaded);
+    } catch (err) {
+      console.error("Szinkron (le) hiba:", err);
+    }
+  }
+
+  // Amikor a foglalások változnak (és nem letöltésből) -> felküldjük
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    if (syncingRef.current) { syncingRef.current = false; return; }
+    syncBookingsUp(bookings);
+  }, [bookings, salonId]);
+
+  // Induló betöltés + periodikus frissítés (12 mp)
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    fetchBookingsDown(); // induláskor
+    const iv = setInterval(fetchBookingsDown, 12000);
+    return () => clearInterval(iv);
+  }, [salonId]);
+
   // Automatikus törlés: a beállított napnál régebbi múltbeli foglalások eltávolítása (induláskor)
   React.useEffect(() => {
     const days = settings.autoDeleteDays || 0;
