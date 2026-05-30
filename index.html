@@ -961,7 +961,7 @@ function App() {
     const sid = stylistId || stylists[0]?.id;
     const stylistSvcs = getStylistServices(sid);
     setQuickBooking({ date, stylistId: sid });
-    setQuickForm({ clientPhone:"", clientName:"", serviceId: stylistSvcs[0]?.id || services[0]?.id || 1, serviceIds: [stylistSvcs[0]?.id || services[0]?.id || 1], note:"", isNew:false, time: time || "", repeat: "none", repeatCount: 4 });
+    setQuickForm({ clientPhone:"", clientName:"", serviceId: stylistSvcs[0]?.id || services[0]?.id || 1, serviceIds: [stylistSvcs[0]?.id || services[0]?.id || 1], note:"", isNew:false, time: time || "", repeat: "none", repeatCount: 4, mode: "booking", blockDur: 60, blockReason: "" });
   }
   function lookupQuickClient(phone) {
     const c = clients.find(cl => cl.phone === phone);
@@ -1018,6 +1018,19 @@ function App() {
     } else {
       showToast("Foglalás hozzáadva");
     }
+  }
+
+  function saveQuickBlock() {
+    if (!quickBooking || !quickForm.time) { showToast("Válassz időpontot!", "error"); return; }
+    const st = stylists.find(s => s.id === quickBooking.stylistId);
+    if (!st) return;
+    const dur = +quickForm.blockDur || 60;
+    const endMin = timeToMinutes(quickForm.time) + dur;
+    const to = `${String(Math.floor(endMin/60)).padStart(2,"0")}:${String(endMin%60).padStart(2,"0")}`;
+    const block = { date: quickBooking.date, from: quickForm.time, to, reason: quickForm.blockReason || "" };
+    saveStylist({...st, blocks: [...(st.blocks || []), block]});
+    setQuickBooking(null);
+    showToast("Elfoglaltság hozzáadva – erre az időre nem foglalhatnak");
   }
 
   function addStylist() {
@@ -2210,6 +2223,27 @@ function App() {
                               );
                             })()}
 
+                            {/* Elfoglaltság blokkok (csíkos szürke, törölhető) */}
+                            {(s.blocks || []).filter(bl => bl.date === adminDate).map((bl, bli) => {
+                              const bMin = timeToMinutes(bl.from);
+                              const topPx = ((bMin - firstHour) * 56 / 60);
+                              const durMin = Math.max(15, timeToMinutes(bl.to) - bMin);
+                              const heightPx = (durMin * 56 / 60);
+                              const realIdx = (s.blocks || []).indexOf(bl);
+                              return (
+                                <div key={`blk-${bli}`} style={{
+                                  position:"absolute", top:`${topPx}px`, left:"2px", right:"2px",
+                                  height:`${Math.max(heightPx-2, 16)}px`,
+                                  background:"repeating-linear-gradient(45deg, #5a5a5a, #5a5a5a 6px, #474747 6px, #474747 12px)",
+                                  border:"1px solid #6f6f6f", borderRadius:"3px", zIndex: 2,
+                                  display:"flex", alignItems:"center", justifyContent:"space-between", padding:"2px 6px", overflow:"hidden",
+                                }}>
+                                  <span style={{fontSize:"10px", fontWeight:"700", color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>⛔ {bl.reason || "Elfoglalt"} · {bl.from}–{bl.to}</span>
+                                  <button onClick={(e) => { e.stopPropagation(); if (confirm("Törlöd ezt az elfoglaltságot?")) saveStylist({...s, blocks: s.blocks.filter((_,j)=>j!==realIdx)}); }} style={{background:"rgba(0,0,0,0.45)", color:"#fff", border:"none", borderRadius:"3px", width:"18px", height:"18px", fontSize:"11px", cursor:"pointer", flexShrink:0, lineHeight:1, padding:0}}>✕</button>
+                                </div>
+                              );
+                            })}
+
                             {/* Foglalás blokkok (felül, z-index 2) */}
                             {stylistBookings.map(b => {
                               const bMin = timeToMinutes(b.time);
@@ -2539,48 +2573,6 @@ function App() {
                               </select>
                             </div>
 
-                            {/* Egyéb elfoglaltság (admin) */}
-                            <div style={{marginTop:"14px", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>
-                              <div style={{fontSize:"11px", color:C.sub, marginBottom:"8px", letterSpacing:"0.1em", fontWeight:"700"}}>⛔ EGYÉB ELFOGLALTSÁG</div>
-                              {(s.blocks || []).slice().sort((a,b)=> (a.date+a.from).localeCompare(b.date+b.from)).map((b, bi) => {
-                                const realIdx = (s.blocks || []).indexOf(b);
-                                return (
-                                  <div key={bi} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", background:C.surfaceAlt, borderRadius:"4px", marginBottom:"4px"}}>
-                                    <span style={{fontSize:"11px"}}>⛔ {b.date} · {b.from}–{b.to}{b.reason ? ` · ${b.reason}` : ""}</span>
-                                    <button style={S.btnIcon} onClick={() => saveStylist({...s, blocks: s.blocks.filter((_,j)=>j!==realIdx)})}>✕</button>
-                                  </div>
-                                );
-                              })}
-                              <div style={{display:"flex", gap:"6px", marginTop:"6px", flexWrap:"wrap"}}>
-                                <input type="date" id={`ablk_date_${s.id}`} style={{...S.input, flex:1, minWidth:"110px", padding:"6px 10px", fontSize:"11px"}} />
-                                <input type="time" id={`ablk_from_${s.id}`} defaultValue="12:00" style={{...S.input, width:"95px", padding:"6px 8px", fontSize:"11px"}} />
-                                <select id={`ablk_dur_${s.id}`} defaultValue="60" style={{...S.input, width:"100px", padding:"6px 8px", fontSize:"11px", cursor:"pointer"}}>
-                                  <option value="15">15 perc</option>
-                                  <option value="30">30 perc</option>
-                                  <option value="45">45 perc</option>
-                                  <option value="60">1 óra</option>
-                                  <option value="90">1,5 óra</option>
-                                  <option value="120">2 óra</option>
-                                  <option value="180">3 óra</option>
-                                  <option value="240">4 óra</option>
-                                </select>
-                                <input type="text" id={`ablk_reason_${s.id}`} placeholder="megnevezés" style={{...S.input, flex:1, minWidth:"90px", padding:"6px 10px", fontSize:"11px"}} />
-                                <button style={{...S.btnSec, fontSize:"11px"}} onClick={() => {
-                                  const date = document.getElementById(`ablk_date_${s.id}`).value;
-                                  const from = document.getElementById(`ablk_from_${s.id}`).value;
-                                  const dur = +document.getElementById(`ablk_dur_${s.id}`).value;
-                                  const reason = document.getElementById(`ablk_reason_${s.id}`).value;
-                                  if (!date || !from) { showToast("Adj meg dátumot és kezdő időt!", "error"); return; }
-                                  const endMin = timeToMinutes(from) + dur;
-                                  const to = `${String(Math.floor(endMin/60)).padStart(2,"0")}:${String(endMin%60).padStart(2,"0")}`;
-                                  saveStylist({...s, blocks: [...(s.blocks || []), {date, from, to, reason}]});
-                                  document.getElementById(`ablk_date_${s.id}`).value = "";
-                                  document.getElementById(`ablk_reason_${s.id}`).value = "";
-                                  showToast("Elfoglaltság hozzáadva");
-                                }}>+</button>
-                              </div>
-                            </div>
-
                             {/* Szolgáltatások konfigurálása */}
                             <div style={{marginTop:"14px", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>
                               <div style={{fontSize:"11px", color:C.sub, marginBottom:"8px", letterSpacing:"0.1em", fontWeight:"700"}}>💈 SZOLGÁLTATÁSOK (egyéni idő/ár)</div>
@@ -2846,57 +2838,6 @@ function App() {
                       <option value={90}>3 hónap (90 nap)</option>
                     </select>
                     <div style={{fontSize:"11px", color:C.accent, marginTop:"8px"}}>Jelenleg: {me.bookingHorizonDays || 30} napra előre foglalhatnak hozzád.</div>
-                  </div>
-
-                  {/* Egyéb elfoglaltság */}
-                  <div style={S.card}>
-                    <span style={S.label}>⛔ Egyéb elfoglaltság</span>
-                    <div style={{fontSize:"11px", color:C.textDim, marginBottom:"12px"}}>Add meg mikor NEM vagy elérhető egy adott napon (pl. ebéd, intézkedés). Erre az idősávra senki nem tud hozzád foglalni. Csak ha szeretnéd – bármikor hozzáadható és törölhető.</div>
-                    {(me.blocks || []).length === 0 ? (
-                      <div style={{fontSize:"12px", color:C.muted, marginBottom:"10px"}}>Nincs rögzített elfoglaltság.</div>
-                    ) : (
-                      (me.blocks || []).slice().sort((a,b)=> (a.date+a.from).localeCompare(b.date+b.from)).map((b, i) => {
-                        const realIdx = (me.blocks || []).indexOf(b);
-                        return (
-                          <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:C.surfaceAlt, borderRadius:"6px", marginBottom:"6px"}}>
-                            <span style={{fontSize:"13px"}}>⛔ {b.date} · {b.from}–{b.to}{b.reason ? ` · ${b.reason}` : ""}</span>
-                            <button style={S.btnIcon} onClick={() => saveStylist({...me, blocks: me.blocks.filter((_,j)=>j!==realIdx)})}>✕</button>
-                          </div>
-                        );
-                      })
-                    )}
-                    <div style={{display:"flex", flexDirection:"column", gap:"6px", marginTop:"10px"}}>
-                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap"}}>
-                        <input type="date" id={`blk_date_${me.id}`} style={{...S.input, flex:1, minWidth:"130px"}} />
-                        <input type="time" id={`blk_from_${me.id}`} defaultValue="12:00" style={{...S.input, width:"110px"}} />
-                        <select id={`blk_dur_${me.id}`} defaultValue="60" style={{...S.input, width:"120px", cursor:"pointer"}}>
-                          <option value="15">15 perc</option>
-                          <option value="30">30 perc</option>
-                          <option value="45">45 perc</option>
-                          <option value="60">1 óra</option>
-                          <option value="90">1,5 óra</option>
-                          <option value="120">2 óra</option>
-                          <option value="180">3 óra</option>
-                          <option value="240">4 óra</option>
-                        </select>
-                      </div>
-                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap"}}>
-                        <input type="text" id={`blk_reason_${me.id}`} placeholder="Megnevezés (pl. ebéd) – nem kötelező" style={{...S.input, flex:1, minWidth:"140px"}} />
-                        <button style={S.btnSec} onClick={() => {
-                          const date = document.getElementById(`blk_date_${me.id}`).value;
-                          const from = document.getElementById(`blk_from_${me.id}`).value;
-                          const dur = +document.getElementById(`blk_dur_${me.id}`).value;
-                          const reason = document.getElementById(`blk_reason_${me.id}`).value;
-                          if (!date || !from) { showToast("Adj meg dátumot és kezdő időt!", "error"); return; }
-                          const endMin = timeToMinutes(from) + dur;
-                          const to = `${String(Math.floor(endMin/60)).padStart(2,"0")}:${String(endMin%60).padStart(2,"0")}`;
-                          saveStylist({...me, blocks: [...(me.blocks || []), {date, from, to, reason}]});
-                          document.getElementById(`blk_date_${me.id}`).value = "";
-                          document.getElementById(`blk_reason_${me.id}`).value = "";
-                          showToast("Elfoglaltság hozzáadva – erre az időre nem foglalhatnak");
-                        }}>+ Hozzáad</button>
-                      </div>
-                    </div>
                   </div>
 
                   {/* Szabadság */}
@@ -3391,8 +3332,14 @@ function App() {
       {quickBooking && (
         <div onClick={() => setQuickBooking(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
           <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"400px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
-            <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px", marginBottom:"4px"}}>+ Új foglalás</div>
+            <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px", marginBottom:"4px"}}>{quickForm.mode === "block" ? "⛔ Elfoglaltság" : "+ Új foglalás"}</div>
             <div style={{fontSize:"12px", color:C.accent, marginBottom:"16px", letterSpacing:"0.05em", fontWeight:"700"}}>📅 {quickBooking.date}</div>
+
+            {/* Mód-váltó: Foglalás vagy Elfoglaltság */}
+            <div style={{display:"flex", gap:"6px", marginBottom:"16px"}}>
+              <button onClick={() => setQuickForm({...quickForm, mode: "booking"})} style={{flex:1, padding:"9px", borderRadius:"6px", border:`1px solid ${quickForm.mode !== "block" ? C.accent : C.border}`, background: quickForm.mode !== "block" ? C.accent+"22" : "transparent", color: C.text, cursor:"pointer", fontSize:"12px", fontWeight:"700"}}>📅 Foglalás</button>
+              <button onClick={() => setQuickForm({...quickForm, mode: "block"})} style={{flex:1, padding:"9px", borderRadius:"6px", border:`1px solid ${quickForm.mode === "block" ? C.accent : C.border}`, background: quickForm.mode === "block" ? C.accent+"22" : "transparent", color: C.text, cursor:"pointer", fontSize:"12px", fontWeight:"700"}}>⛔ Elfoglaltság</button>
+            </div>
 
             <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Barber</div>
@@ -3415,6 +3362,31 @@ function App() {
               </select>
             </div>
 
+            {/* ELFOGLALTSÁG mód mezői */}
+            {quickForm.mode === "block" && (
+              <>
+                <div style={{marginBottom:"10px"}}>
+                  <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Időtartam</div>
+                  <select style={S.input} value={quickForm.blockDur} onChange={e => setQuickForm({...quickForm, blockDur: +e.target.value})}>
+                    <option value={15}>15 perc</option>
+                    <option value={30}>30 perc</option>
+                    <option value={45}>45 perc</option>
+                    <option value={60}>1 óra</option>
+                    <option value={90}>1,5 óra</option>
+                    <option value={120}>2 óra</option>
+                    <option value={180}>3 óra</option>
+                    <option value={240}>4 óra</option>
+                  </select>
+                </div>
+                <div style={{marginBottom:"12px"}}>
+                  <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Megnevezés (nem kötelező)</div>
+                  <input style={S.input} placeholder="pl. ebéd, intézkedés" value={quickForm.blockReason} onChange={e => setQuickForm({...quickForm, blockReason: e.target.value})} />
+                </div>
+              </>
+            )}
+
+            {/* FOGLALÁS mód mezői */}
+            {quickForm.mode !== "block" && (<>
             <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"6px"}}>Szolgáltatás(ok) <span style={{color:C.muted}}>– többet is választhatsz</span></div>
               <div style={{display:"flex", flexDirection:"column", gap:"4px"}}>
@@ -3475,8 +3447,14 @@ function App() {
               )}
             </div>
 
+            </>)}
+
             <div style={{display:"flex", gap:"6px"}}>
-              <button style={{...S.btn, flex:1, opacity: (!quickForm.clientName || !quickForm.clientPhone || !quickForm.time || (quickForm.serviceIds || []).length === 0) ? 0.3 : 1}} disabled={!quickForm.clientName || !quickForm.clientPhone || !quickForm.time || (quickForm.serviceIds || []).length === 0} onClick={saveQuickBooking}>Mentés</button>
+              {quickForm.mode === "block" ? (
+                <button style={{...S.btn, flex:1, opacity: !quickForm.time ? 0.3 : 1}} disabled={!quickForm.time} onClick={saveQuickBlock}>⛔ Elfoglaltság hozzáadása</button>
+              ) : (
+                <button style={{...S.btn, flex:1, opacity: (!quickForm.clientName || !quickForm.clientPhone || !quickForm.time || (quickForm.serviceIds || []).length === 0) ? 0.3 : 1}} disabled={!quickForm.clientName || !quickForm.clientPhone || !quickForm.time || (quickForm.serviceIds || []).length === 0} onClick={saveQuickBooking}>Mentés</button>
+              )}
               <button style={S.btnSec} onClick={() => setQuickBooking(null)}>Mégse</button>
             </div>
           </div>
