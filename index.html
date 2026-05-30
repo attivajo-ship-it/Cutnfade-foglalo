@@ -582,6 +582,53 @@ function App() {
     return () => clearInterval(iv);
   }, [salonId]);
 
+  // ===== BEÁLLÍTÁSOK SZINKRON =====
+  // A beállítások a szalon sorának 'settings' (jsonb) mezőjébe mennek.
+  const settingsSyncingRef = React.useRef(false);
+  const settingsRef = React.useRef(settings);
+  React.useEffect(() => { settingsRef.current = settings; }, [settings]);
+
+  async function syncSettingsUp(obj) {
+    if (!sb || !salonId) return;
+    try {
+      const { error } = await sb.from("salons")
+        .update({ settings: obj, theme: obj.theme || "mono" })
+        .eq("id", salonId);
+      if (error) throw error;
+    } catch (err) { console.error("Beállítás szinkron (fel) hiba:", err); }
+  }
+
+  async function fetchSettingsDown() {
+    if (!sb || !salonId) return;
+    try {
+      const { data, error } = await sb.from("salons").select("settings").eq("id", salonId).single();
+      if (error) throw error;
+      const dl = data && data.settings;
+      // Ha a DB-ben üres a settings, de van helyi -> felküldjük
+      if ((!dl || Object.keys(dl).length === 0)) {
+        if (settingsRef.current && Object.keys(settingsRef.current).length > 0) {
+          await syncSettingsUp(settingsRef.current);
+        }
+        return;
+      }
+      settingsSyncingRef.current = true;
+      setSettings(dl);
+    } catch (err) { console.error("Beállítás szinkron (le) hiba:", err); }
+  }
+
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    if (settingsSyncingRef.current) { settingsSyncingRef.current = false; return; }
+    syncSettingsUp(settings);
+  }, [settings, salonId]);
+
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    fetchSettingsDown();
+    const iv = setInterval(fetchSettingsDown, 12000);
+    return () => clearInterval(iv);
+  }, [salonId]);
+
   // Automatikus törlés: a beállított napnál régebbi múltbeli foglalások eltávolítása (induláskor)
   React.useEffect(() => {
     const days = settings.autoDeleteDays || 0;
