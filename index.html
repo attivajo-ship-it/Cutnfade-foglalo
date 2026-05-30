@@ -1045,6 +1045,17 @@ function App() {
     showToast("Elfoglaltság hozzáadva – erre az időre nem foglalhatnak");
   }
 
+  function saveQuickDayOff() {
+    if (!quickBooking) return;
+    const st = stylists.find(s => s.id === quickBooking.stylistId);
+    if (!st) return;
+    const d = quickBooking.date;
+    if ((st.vacation || []).some(v => v.from === d && v.to === d)) { showToast("Ez a nap már ki van véve", "error"); return; }
+    saveStylist({...st, vacation: [...(st.vacation || []), {from: d, to: d}]});
+    setQuickBooking(null);
+    showToast("Nap kivéve – ezen a napon nem foglalható");
+  }
+
   function addStylist() {
     if (!newStylist.name) return;
     const initials = newStylist.initials || newStylist.name.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase();
@@ -3370,13 +3381,14 @@ function App() {
       {quickBooking && (
         <div onClick={() => setQuickBooking(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
           <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"400px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
-            <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px", marginBottom:"4px"}}>{quickForm.mode === "block" ? "⛔ Elfoglaltság" : "+ Új foglalás"}</div>
+            <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px", marginBottom:"4px"}}>{quickForm.mode === "block" ? "⛔ Elfoglaltság" : quickForm.mode === "dayoff" ? "🏖 Szabadnap" : "+ Új foglalás"}</div>
             <div style={{fontSize:"12px", color:C.accent, marginBottom:"16px", letterSpacing:"0.05em", fontWeight:"700"}}>📅 {quickBooking.date}</div>
 
             {/* Mód-váltó: Foglalás vagy Elfoglaltság */}
             <div style={{display:"flex", gap:"6px", marginBottom:"16px"}}>
-              <button onClick={() => setQuickForm({...quickForm, mode: "booking"})} style={{flex:1, padding:"9px", borderRadius:"6px", border:`1px solid ${quickForm.mode !== "block" ? C.accent : C.border}`, background: quickForm.mode !== "block" ? C.accent+"22" : "transparent", color: C.text, cursor:"pointer", fontSize:"12px", fontWeight:"700"}}>📅 Foglalás</button>
-              <button onClick={() => setQuickForm({...quickForm, mode: "block"})} style={{flex:1, padding:"9px", borderRadius:"6px", border:`1px solid ${quickForm.mode === "block" ? C.accent : C.border}`, background: quickForm.mode === "block" ? C.accent+"22" : "transparent", color: C.text, cursor:"pointer", fontSize:"12px", fontWeight:"700"}}>⛔ Elfoglaltság</button>
+              <button onClick={() => setQuickForm({...quickForm, mode: "booking"})} style={{flex:1, padding:"8px 4px", borderRadius:"6px", border:`1px solid ${(!quickForm.mode || quickForm.mode === "booking") ? C.accent : C.border}`, background: (!quickForm.mode || quickForm.mode === "booking") ? C.accent+"22" : "transparent", color: C.text, cursor:"pointer", fontSize:"11px", fontWeight:"700"}}>📅 Foglalás</button>
+              <button onClick={() => setQuickForm({...quickForm, mode: "block"})} style={{flex:1, padding:"8px 4px", borderRadius:"6px", border:`1px solid ${quickForm.mode === "block" ? C.accent : C.border}`, background: quickForm.mode === "block" ? C.accent+"22" : "transparent", color: C.text, cursor:"pointer", fontSize:"11px", fontWeight:"700"}}>⛔ Elfoglalt</button>
+              <button onClick={() => setQuickForm({...quickForm, mode: "dayoff"})} style={{flex:1, padding:"8px 4px", borderRadius:"6px", border:`1px solid ${quickForm.mode === "dayoff" ? C.accent : C.border}`, background: quickForm.mode === "dayoff" ? C.accent+"22" : "transparent", color: C.text, cursor:"pointer", fontSize:"11px", fontWeight:"700"}}>🏖 Szabadnap</button>
             </div>
 
             <div style={{marginBottom:"10px"}}>
@@ -3386,6 +3398,7 @@ function App() {
               </select>
             </div>
 
+            {quickForm.mode !== "dayoff" && (
             <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Időpont <span style={{color:C.muted}}>(munkaidőn kívül is)</span></div>
               <select style={S.input} value={quickForm.time} onChange={e => setQuickForm({...quickForm, time: e.target.value})}>
@@ -3399,6 +3412,18 @@ function App() {
                 })}
               </select>
             </div>
+            )}
+
+            {/* SZABADNAP mód */}
+            {quickForm.mode === "dayoff" && (
+              <div style={{marginBottom:"12px", padding:"14px", background:C.surfaceAlt, borderRadius:"8px", border:`1px solid ${C.border}`}}>
+                <div style={{fontSize:"13px", fontWeight:"700", marginBottom:"6px"}}>🏖 Egész nap kivétele</div>
+                <div style={{fontSize:"12px", color:C.textDim}}>A(z) <b>{quickBooking.date}</b> teljes napot kiveszed ennek a barbernek. Ezen a napon a vendégek <b>nem tudnak</b> hozzá foglalni. Később visszavonhatod a "Saját adatok" → Szabadságok résznél.</div>
+                {(stylists.find(s=>s.id===quickBooking.stylistId)?.vacation || []).some(v => v.from === quickBooking.date && v.to === quickBooking.date) && (
+                  <div style={{fontSize:"12px", color:C.danger, marginTop:"8px", fontWeight:"700"}}>⚠ Ez a nap már ki van véve.</div>
+                )}
+              </div>
+            )}
 
             {/* ELFOGLALTSÁG mód mezői */}
             {quickForm.mode === "block" && (
@@ -3424,7 +3449,7 @@ function App() {
             )}
 
             {/* FOGLALÁS mód mezői */}
-            {quickForm.mode !== "block" && (<>
+            {(!quickForm.mode || quickForm.mode === "booking") && (<>
             <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"6px"}}>Szolgáltatás(ok) <span style={{color:C.muted}}>– többet is választhatsz</span></div>
               <div style={{display:"flex", flexDirection:"column", gap:"4px"}}>
@@ -3490,6 +3515,8 @@ function App() {
             <div style={{display:"flex", gap:"6px"}}>
               {quickForm.mode === "block" ? (
                 <button style={{...S.btn, flex:1, opacity: !quickForm.time ? 0.3 : 1}} disabled={!quickForm.time} onClick={saveQuickBlock}>⛔ Elfoglaltság hozzáadása</button>
+              ) : quickForm.mode === "dayoff" ? (
+                <button style={{...S.btn, flex:1}} onClick={saveQuickDayOff}>🏖 Nap kivétele</button>
               ) : (
                 <button style={{...S.btn, flex:1, opacity: (!quickForm.clientName || !quickForm.clientPhone || !quickForm.time || (quickForm.serviceIds || []).length === 0) ? 0.3 : 1}} disabled={!quickForm.clientName || !quickForm.clientPhone || !quickForm.time || (quickForm.serviceIds || []).length === 0} onClick={saveQuickBooking}>Mentés</button>
               )}
