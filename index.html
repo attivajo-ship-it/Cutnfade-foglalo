@@ -160,6 +160,18 @@ const CNF_HOURS = {
   sun: { open: "09:00", close: "18:00", off: true },
 };
 
+// ÚJ barber alapértelmezett munkaideje: minden nap ZÁRVA.
+// Így amíg a barber be nem állítja mikor dolgozik, senki nem tud hozzá foglalni.
+const EMPTY_HOURS = {
+  mon: { open: "09:00", close: "18:00", off: true },
+  tue: { open: "09:00", close: "18:00", off: true },
+  wed: { open: "09:00", close: "18:00", off: true },
+  thu: { open: "09:00", close: "18:00", off: true },
+  fri: { open: "09:00", close: "18:00", off: true },
+  sat: { open: "09:00", close: "18:00", off: true },
+  sun: { open: "09:00", close: "18:00", off: true },
+};
+
 function App() {
   const today = getToday(); // mindig friss
 
@@ -1003,8 +1015,8 @@ function App() {
     const initials = newStylist.initials || newStylist.name.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase();
     const colors = ["#e8d5d5","#b8dfe0","#c8e6c8","#d8d8d8","#e8c8e0","#f0e0c0","#d0c8e8"];
     const color = colors[stylists.length % colors.length];
-    setStylists(prev => [...prev, { id: Date.now(), name: newStylist.name, title: "Barber", initials, color, email: newStylist.email || "", password: newStylist.password || "barber123", hours: CNF_HOURS, vacation: [] }]);
-    setNewStylist({ name: "", initials: "", email: "", password: "" }); setShowAddStylist(false); showToast("Hozzáadva");
+    setStylists(prev => [...prev, { id: Date.now(), name: newStylist.name, title: "Barber", initials, color, email: newStylist.email || "", password: newStylist.password || "barber123", hours: EMPTY_HOURS, vacation: [] }]);
+    setNewStylist({ name: "", initials: "", email: "", password: "" }); setShowAddStylist(false); showToast("Hozzáadva — a barber a 'Saját adatok' fülön állítsa be a munkaidejét");
   }
   function deleteStylist(id) { if (!confirm("Biztosan törlöd?")) return; setStylists(prev => prev.filter(s => s.id !== id)); showToast("Törölve"); }
   function saveStylist(s) { setStylists(prev => prev.map(x => x.id === s.id ? s : x)); setEditingStylist(null); showToast("Mentve"); }
@@ -2654,6 +2666,7 @@ function App() {
               const myRevenueMonth = myCompleted.filter(b => b.date.startsWith(todayStr.slice(0,7))).reduce((s,b)=>s+(b.paidPrice ?? b.price),0);
               const newVacFrom = `vac_from_${me.id}`;
               const newVacTo = `vac_to_${me.id}`;
+              const newDayOff = `day_off_${me.id}`;
 
               return (
                 <>
@@ -2727,7 +2740,8 @@ function App() {
                   {/* Munkaidő */}
                   <div style={S.card}>
                     <span style={S.label}>🕒 Munkaidő</span>
-                    <div style={{fontSize:"11px", color:C.textDim, marginBottom:"12px"}}>Itt állíthatod be melyik napon dolgozol és milyen időtartamban.</div>
+                    <div style={{fontSize:"11px", color:C.textDim, marginBottom:"4px"}}>Itt állíthatod be melyik napon dolgozol és milyen időtartamban.</div>
+                    <div style={{fontSize:"11px", color:C.accent, marginBottom:"12px"}}>🔁 Ez a heti beosztás minden héten automatikusan ismétlődik.</div>
                     {WEEKDAY_KEYS.map((dk, i) => (
                       <div key={dk} style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"8px", flexWrap:"wrap"}}>
                         <div style={{width:"60px", fontSize:"12px", fontWeight:"700"}}>{["Vas","Hét","Kedd","Sze","Csü","Pén","Szo"][i]}</div>
@@ -2759,19 +2773,35 @@ function App() {
                         </div>
                       ))
                     )}
-                    <div style={{display:"flex", gap:"6px", marginTop:"10px", flexWrap:"wrap"}}>
-                      <input type="date" id={newVacFrom} style={{...S.input, flex:1, minWidth:"120px"}} />
-                      <input type="date" id={newVacTo} style={{...S.input, flex:1, minWidth:"120px"}} />
-                      <button style={S.btnSec} onClick={() => {
-                        const from = document.getElementById(newVacFrom).value;
-                        const to = document.getElementById(newVacTo).value;
-                        if (!from || !to) { showToast("Adj meg kezdő és záró napot!", "error"); return; }
-                        if (from > to) { showToast("A záró nap nem lehet korábbi!", "error"); return; }
-                        saveStylist({...me, vacation: [...(me.vacation || []), {from, to}]});
-                        document.getElementById(newVacFrom).value = "";
-                        document.getElementById(newVacTo).value = "";
-                        showToast("Szabadság rögzítve");
-                      }}>+ Hozzáad</button>
+                    <div style={{display:"flex", flexDirection:"column", gap:"6px", marginTop:"10px"}}>
+                      <div style={{fontSize:"11px", color:C.textDim, fontWeight:"700"}}>📅 Egy nap kivétele (pl. orvos, elfoglaltság):</div>
+                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap"}}>
+                        <input type="date" id={newDayOff} style={{...S.input, flex:1, minWidth:"120px"}} />
+                        <button style={S.btnSec} onClick={() => {
+                          const d = document.getElementById(newDayOff).value;
+                          if (!d) { showToast("Válassz egy napot!", "error"); return; }
+                          saveStylist({...me, vacation: [...(me.vacation || []), {from: d, to: d}]});
+                          document.getElementById(newDayOff).value = "";
+                          showToast("Nap kivéve – ezen a napon nem leszel foglalható");
+                        }}>Nap kivétele</button>
+                      </div>
+                    </div>
+                    <div style={{display:"flex", flexDirection:"column", gap:"6px", marginTop:"14px"}}>
+                      <div style={{fontSize:"11px", color:C.textDim, fontWeight:"700"}}>🏖 Több napos szabadság (-tól -ig):</div>
+                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap"}}>
+                        <input type="date" id={newVacFrom} style={{...S.input, flex:1, minWidth:"120px"}} />
+                        <input type="date" id={newVacTo} style={{...S.input, flex:1, minWidth:"120px"}} />
+                        <button style={S.btnSec} onClick={() => {
+                          const from = document.getElementById(newVacFrom).value;
+                          const to = document.getElementById(newVacTo).value;
+                          if (!from || !to) { showToast("Adj meg kezdő és záró napot!", "error"); return; }
+                          if (from > to) { showToast("A záró nap nem lehet korábbi!", "error"); return; }
+                          saveStylist({...me, vacation: [...(me.vacation || []), {from, to}]});
+                          document.getElementById(newVacFrom).value = "";
+                          document.getElementById(newVacTo).value = "";
+                          showToast("Szabadság rögzítve");
+                        }}>+ Hozzáad</button>
+                      </div>
                     </div>
                   </div>
                 </>
