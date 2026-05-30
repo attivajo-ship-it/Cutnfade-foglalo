@@ -462,6 +462,126 @@ function App() {
     return () => clearInterval(iv);
   }, [salonId]);
 
+  // ===== BARBEREK SZINKRON =====
+  const stylistSyncingRef = React.useRef(false);
+  const prevStylistIdsRef = React.useRef(null);
+  const stylistsRef = React.useRef(stylists);
+  React.useEffect(() => { stylistsRef.current = stylists; }, [stylists]);
+
+  async function syncStylistsUp(list) {
+    if (!sb || !salonId) return;
+    try {
+      if (list.length > 0) {
+        const rows = list.map((s, i) => ({
+          salon_id: salonId, ext_id: String(s.id),
+          name: s.name || "", initials: s.initials || "", color: s.color || "#888888",
+          email: s.email || null, sort_order: i, raw: s,
+        }));
+        const { error } = await sb.from("stylists").upsert(rows, { onConflict: "salon_id,ext_id" });
+        if (error) throw error;
+      }
+      const prev = prevStylistIdsRef.current;
+      const currentIds = new Set(list.map(s => String(s.id)));
+      if (prev) {
+        const removed = [...prev].filter(id => !currentIds.has(id));
+        if (removed.length > 0) {
+          const { error } = await sb.from("stylists").delete().eq("salon_id", salonId).in("ext_id", removed);
+          if (error) throw error;
+        }
+      }
+      prevStylistIdsRef.current = currentIds;
+    } catch (err) { console.error("Barber szinkron (fel) hiba:", err); }
+  }
+
+  async function fetchStylistsDown() {
+    if (!sb || !salonId) return;
+    try {
+      const { data, error } = await sb.from("stylists").select("raw").eq("salon_id", salonId).order("sort_order");
+      if (error) throw error;
+      const downloaded = (data || []).map(r => r.raw).filter(Boolean);
+      if (downloaded.length === 0 && stylistsRef.current.length > 0) {
+        await syncStylistsUp(stylistsRef.current);
+        return;
+      }
+      stylistSyncingRef.current = true;
+      prevStylistIdsRef.current = new Set(downloaded.map(s => String(s.id)));
+      setStylists(downloaded);
+    } catch (err) { console.error("Barber szinkron (le) hiba:", err); }
+  }
+
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    if (stylistSyncingRef.current) { stylistSyncingRef.current = false; return; }
+    syncStylistsUp(stylists);
+  }, [stylists, salonId]);
+
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    fetchStylistsDown();
+    const iv = setInterval(fetchStylistsDown, 12000);
+    return () => clearInterval(iv);
+  }, [salonId]);
+
+  // ===== SZOLGÁLTATÁSOK SZINKRON =====
+  const serviceSyncingRef = React.useRef(false);
+  const prevServiceIdsRef = React.useRef(null);
+  const servicesRef = React.useRef(services);
+  React.useEffect(() => { servicesRef.current = services; }, [services]);
+
+  async function syncServicesUp(list) {
+    if (!sb || !salonId) return;
+    try {
+      if (list.length > 0) {
+        const rows = list.map((s, i) => ({
+          salon_id: salonId, ext_id: String(s.id),
+          name: s.name || "", duration: s.duration || 30, price: s.price || 0,
+          sort_order: i, raw: s,
+        }));
+        const { error } = await sb.from("services").upsert(rows, { onConflict: "salon_id,ext_id" });
+        if (error) throw error;
+      }
+      const prev = prevServiceIdsRef.current;
+      const currentIds = new Set(list.map(s => String(s.id)));
+      if (prev) {
+        const removed = [...prev].filter(id => !currentIds.has(id));
+        if (removed.length > 0) {
+          const { error } = await sb.from("services").delete().eq("salon_id", salonId).in("ext_id", removed);
+          if (error) throw error;
+        }
+      }
+      prevServiceIdsRef.current = currentIds;
+    } catch (err) { console.error("Szolgáltatás szinkron (fel) hiba:", err); }
+  }
+
+  async function fetchServicesDown() {
+    if (!sb || !salonId) return;
+    try {
+      const { data, error } = await sb.from("services").select("raw").eq("salon_id", salonId).order("sort_order");
+      if (error) throw error;
+      const downloaded = (data || []).map(r => r.raw).filter(Boolean);
+      if (downloaded.length === 0 && servicesRef.current.length > 0) {
+        await syncServicesUp(servicesRef.current);
+        return;
+      }
+      serviceSyncingRef.current = true;
+      prevServiceIdsRef.current = new Set(downloaded.map(s => String(s.id)));
+      setServices(downloaded);
+    } catch (err) { console.error("Szolgáltatás szinkron (le) hiba:", err); }
+  }
+
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    if (serviceSyncingRef.current) { serviceSyncingRef.current = false; return; }
+    syncServicesUp(services);
+  }, [services, salonId]);
+
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    fetchServicesDown();
+    const iv = setInterval(fetchServicesDown, 12000);
+    return () => clearInterval(iv);
+  }, [salonId]);
+
   // Automatikus törlés: a beállított napnál régebbi múltbeli foglalások eltávolítása (induláskor)
   React.useEffect(() => {
     const days = settings.autoDeleteDays || 0;
