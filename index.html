@@ -1488,7 +1488,10 @@ function App() {
                 {HOURS.map(h => {
                   const svc = getStylistService(form.stylist, form.service);
                   const duration = svc?.duration || 30;
-                  const available = isSlotAvailable(form.stylist, selectedDate, h, duration);
+                  // Múltbeli időpont? (ha a kiválasztott nap MA van és az idő már elmúlt)
+                  const nowMin = now.getHours()*60 + now.getMinutes();
+                  const isPast = selectedDate === formatDate(today) && timeToMinutes(h) <= nowMin;
+                  const available = isSlotAvailable(form.stylist, selectedDate, h, duration) && !isPast;
                   const active = form.time === h;
                   return (
                     <button key={h} disabled={!available}
