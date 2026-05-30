@@ -1162,7 +1162,7 @@ function App() {
     header: { background: "linear-gradient(180deg, #141414 0%, #0a0a0a 100%)", borderBottom: `1px solid ${C.border}`, padding: "16px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"12px" },
     logo: { fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: "700", letterSpacing: "0.15em", color: C.text },
     logoAccent: { color: C.accent, fontStyle: "italic" },
-    main: { maxWidth: "1100px", margin: "0 auto", padding: "20px 16px" },
+    main: { maxWidth: view === "admin" && adminUnlocked ? "1600px" : "1100px", margin: "0 auto", padding: "20px 16px" },
     card: { background: C.surface, borderRadius: "8px", padding: "20px", marginBottom: "12px", border: `1px solid ${C.border}` },
     cardHero: { background: `linear-gradient(135deg, ${C.surface} 0%, ${C.surfaceAlt} 100%)`, borderRadius: "12px", padding: "32px 24px", marginBottom: "16px", border: `1px solid ${C.border}`, textAlign:"center", position:"relative", overflow:"hidden" },
     label: { fontSize: "10px", fontWeight: "700", color: C.accent, textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: "12px", display:"block" },
