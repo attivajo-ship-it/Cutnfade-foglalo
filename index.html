@@ -2514,6 +2514,21 @@ function App() {
                               </div>
                             </div>
 
+                            {/* Előfoglalási ablak */}
+                            <div style={{marginTop:"14px", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>
+                              <div style={{fontSize:"11px", color:C.sub, marginBottom:"8px", letterSpacing:"0.1em", fontWeight:"700"}}>📅 ELŐFOGLALÁSI ABLAK</div>
+                              <div style={{fontSize:"11px", color:C.textDim, marginBottom:"6px"}}>Meddig előre foglalhatnak ehhez a barberhez a vendégek.</div>
+                              <select style={{...S.input, fontSize:"12px", padding:"6px 10px", cursor:"pointer"}} value={s.bookingHorizonDays || 30} onChange={e => saveStylist({...s, bookingHorizonDays: +e.target.value})}>
+                                <option value={7}>1 hét (7 nap)</option>
+                                <option value={14}>2 hét (14 nap)</option>
+                                <option value={21}>3 hét (21 nap)</option>
+                                <option value={30}>1 hónap (30 nap)</option>
+                                <option value={45}>6 hét (45 nap)</option>
+                                <option value={60}>2 hónap (60 nap)</option>
+                                <option value={90}>3 hónap (90 nap)</option>
+                              </select>
+                            </div>
+
                             {/* Szolgáltatások konfigurálása */}
                             <div style={{marginTop:"14px", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>
                               <div style={{fontSize:"11px", color:C.sub, marginBottom:"8px", letterSpacing:"0.1em", fontWeight:"700"}}>💈 SZOLGÁLTATÁSOK (egyéni idő/ár)</div>
