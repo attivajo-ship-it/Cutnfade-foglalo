@@ -393,6 +393,75 @@ function App() {
     return () => clearInterval(iv);
   }, [salonId]);
 
+  // ===== VENDÉGKARTON SZINKRON (3c lépés) =====
+  const clientSyncingRef = React.useRef(false);
+  const prevClientIdsRef = React.useRef(null);
+  const clientsRef = React.useRef(clients);
+  React.useEffect(() => { clientsRef.current = clients; }, [clients]);
+
+  async function syncClientsUp(list) {
+    if (!sb || !salonId) return;
+    try {
+      if (list.length > 0) {
+        const rows = list.map(c => ({
+          salon_id: salonId,
+          ext_id: String(c.id),
+          name: c.name || "",
+          phone: c.phone || null,
+          email: c.email || null,
+          points: c.points || 0,
+          noshow_count: c.noShowCount || 0,
+          raw: c,
+        }));
+        const { error } = await sb.from("clients").upsert(rows, { onConflict: "salon_id,ext_id" });
+        if (error) throw error;
+      }
+      const prev = prevClientIdsRef.current;
+      const currentIds = new Set(list.map(c => String(c.id)));
+      if (prev) {
+        const removed = [...prev].filter(id => !currentIds.has(id));
+        if (removed.length > 0) {
+          const { error } = await sb.from("clients").delete().eq("salon_id", salonId).in("ext_id", removed);
+          if (error) throw error;
+        }
+      }
+      prevClientIdsRef.current = currentIds;
+    } catch (err) {
+      console.error("Vendég szinkron (fel) hiba:", err);
+    }
+  }
+
+  async function fetchClientsDown() {
+    if (!sb || !salonId) return;
+    try {
+      const { data, error } = await sb.from("clients").select("raw").eq("salon_id", salonId);
+      if (error) throw error;
+      const downloaded = (data || []).map(r => r.raw).filter(Boolean);
+      if (downloaded.length === 0 && clientsRef.current.length > 0) {
+        await syncClientsUp(clientsRef.current);
+        return;
+      }
+      clientSyncingRef.current = true;
+      prevClientIdsRef.current = new Set(downloaded.map(c => String(c.id)));
+      setClients(downloaded);
+    } catch (err) {
+      console.error("Vendég szinkron (le) hiba:", err);
+    }
+  }
+
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    if (clientSyncingRef.current) { clientSyncingRef.current = false; return; }
+    syncClientsUp(clients);
+  }, [clients, salonId]);
+
+  React.useEffect(() => {
+    if (!sb || !salonId) return;
+    fetchClientsDown();
+    const iv = setInterval(fetchClientsDown, 12000);
+    return () => clearInterval(iv);
+  }, [salonId]);
+
   // Automatikus törlés: a beállított napnál régebbi múltbeli foglalások eltávolítása (induláskor)
   React.useEffect(() => {
     const days = settings.autoDeleteDays || 0;
