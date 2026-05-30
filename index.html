@@ -31,6 +31,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script type="text/babel" data-presets="react" data-type="module">
 
@@ -130,6 +131,17 @@ const parseDate = s => {
 const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
 const load = (key, def) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; } };
 
+// ===== SUPABASE KAPCSOLAT =====
+const SUPABASE_URL = "https://zeratolucqbxpbxncbyy.supabase.co";
+const SUPABASE_KEY = "sb_publishable_DHWBbu7yG-uPpgqpENLYiw__BSK5LVg";
+const SALON_SLUG = "cutnfade"; // ez a szalon azonosítója
+let sb = null;
+try {
+  if (window.supabase && window.supabase.createClient) {
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+} catch (e) { console.error("Supabase init hiba:", e); }
+
 // Mindig az aktuális napot adja vissza
 function getToday() {
   const d = new Date();
@@ -211,6 +223,11 @@ function App() {
   const [clients, setClients] = React.useState(() => load("cnf_clients", []));
   const [notifications, setNotifications] = React.useState(() => load("cnf_notifications", []));
 
+  // Supabase kapcsolat státusz: null=ellenőrzés alatt, true=ok, false=hiba
+  const [dbStatus, setDbStatus] = React.useState(null);
+  const [dbInfo, setDbInfo] = React.useState("");
+  const [salonId, setSalonId] = React.useState(null);
+
   const [selectedDate, setSelectedDate] = React.useState(formatDate(today));
   const [calOffset, setCalOffset] = React.useState(0);
   const [adminWeekOffset, setAdminWeekOffset] = React.useState(0);
@@ -265,6 +282,36 @@ function App() {
   React.useEffect(() => { localStorage.setItem("cnf_stylists", JSON.stringify(stylists)); }, [stylists]);
   React.useEffect(() => { localStorage.setItem("cnf_services", JSON.stringify(services)); }, [services]);
   React.useEffect(() => { localStorage.setItem("cnf_bookings", JSON.stringify(bookings)); }, [bookings]);
+
+  // ===== SUPABASE KAPCSOLAT TESZT (3a lépés) =====
+  // Beolvassa a szalont + barbereket az adatbázisból, és jelzi hogy él-e a kapcsolat.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!sb) { setDbStatus(false); setDbInfo("A Supabase kliens nem töltődött be."); return; }
+      try {
+        // 1) Szalon lekérése slug alapján
+        const { data: salon, error: e1 } = await sb
+          .from("salons").select("id, name").eq("slug", SALON_SLUG).single();
+        if (e1) throw e1;
+        // 2) Barberek számának lekérése
+        const { count, error: e2 } = await sb
+          .from("stylists").select("id", { count: "exact", head: true }).eq("salon_id", salon.id);
+        if (e2) throw e2;
+        if (cancelled) return;
+        setSalonId(salon.id);
+        setDbStatus(true);
+        setDbInfo(`${salon.name} · ${count} barber`);
+        console.log("✓ Supabase kapcsolódva:", salon.name, "salon_id:", salon.id, "barberek:", count);
+      } catch (err) {
+        if (cancelled) return;
+        setDbStatus(false);
+        setDbInfo(err.message || "Ismeretlen hiba");
+        console.error("Supabase teszt hiba:", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Automatikus törlés: a beállított napnál régebbi múltbeli foglalások eltávolítása (induláskor)
   React.useEffect(() => {
@@ -877,7 +924,10 @@ function App() {
           {/* Felirat */}
           <div>
             <div style={{fontSize:"22px", fontWeight:"700", color: C.text, fontFamily:"Georgia, 'Playfair Display', serif", letterSpacing:"0.02em", lineHeight:1.1}}>CNF Foglaló</div>
-            <div style={{fontSize:"10px", color: C.sub, marginTop:"3px", letterSpacing:"0.15em", textTransform:"uppercase"}}>Időpontfoglaló rendszer</div>
+            <div style={{fontSize:"10px", color: C.sub, marginTop:"3px", letterSpacing:"0.15em", textTransform:"uppercase", display:"flex", alignItems:"center", gap:"6px"}}>
+              <span style={{width:"7px", height:"7px", borderRadius:"50%", background: dbStatus === true ? "#4ade80" : dbStatus === false ? "#dc4a3d" : "#d49a3a", boxShadow: dbStatus === true ? "0 0 6px #4ade80" : "none", flexShrink:0}}></span>
+              {dbStatus === true ? "Adatbázis kapcsolódva" : dbStatus === false ? "Nincs adatbázis kapcsolat" : "Kapcsolódás..."}
+            </div>
           </div>
         </div>
         <div style={{display:"flex", gap:"8px", alignItems:"center", flexWrap:"wrap"}}>
