@@ -727,6 +727,16 @@ function App() {
       const endMin = timeToMinutes(time) + durationMinutes;
       const closeMin = timeToMinutes(hours.close);
       if (endMin > closeMin) return false;
+      // Ebédszünet és alkalmi elfoglaltságok (a vendég ezekre nem foglalhat)
+      const st = stylists.find(s => s.id === stylistId);
+      const newStart = timeToMinutes(time), newEnd = newStart + durationMinutes;
+      if (st?.lunchBreak?.enabled && st.lunchBreak.from && st.lunchBreak.to) {
+        if (newStart < timeToMinutes(st.lunchBreak.to) && timeToMinutes(st.lunchBreak.from) < newEnd) return false;
+      }
+      for (const b of (st?.blocks || [])) {
+        if (b.date !== dateStr) continue;
+        if (newStart < timeToMinutes(b.to) && timeToMinutes(b.from) < newEnd) return false;
+      }
     }
 
     // Megnézzük, hogy az ÚJ foglalás bármelyik slotja ütközik-e meglévővel
@@ -2529,6 +2539,48 @@ function App() {
                               </select>
                             </div>
 
+                            {/* Egyéb elfoglaltság (admin) */}
+                            <div style={{marginTop:"14px", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>
+                              <div style={{fontSize:"11px", color:C.sub, marginBottom:"8px", letterSpacing:"0.1em", fontWeight:"700"}}>⛔ EGYÉB ELFOGLALTSÁG</div>
+                              {(s.blocks || []).slice().sort((a,b)=> (a.date+a.from).localeCompare(b.date+b.from)).map((b, bi) => {
+                                const realIdx = (s.blocks || []).indexOf(b);
+                                return (
+                                  <div key={bi} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", background:C.surfaceAlt, borderRadius:"4px", marginBottom:"4px"}}>
+                                    <span style={{fontSize:"11px"}}>⛔ {b.date} · {b.from}–{b.to}{b.reason ? ` · ${b.reason}` : ""}</span>
+                                    <button style={S.btnIcon} onClick={() => saveStylist({...s, blocks: s.blocks.filter((_,j)=>j!==realIdx)})}>✕</button>
+                                  </div>
+                                );
+                              })}
+                              <div style={{display:"flex", gap:"6px", marginTop:"6px", flexWrap:"wrap"}}>
+                                <input type="date" id={`ablk_date_${s.id}`} style={{...S.input, flex:1, minWidth:"110px", padding:"6px 10px", fontSize:"11px"}} />
+                                <input type="time" id={`ablk_from_${s.id}`} defaultValue="12:00" style={{...S.input, width:"95px", padding:"6px 8px", fontSize:"11px"}} />
+                                <select id={`ablk_dur_${s.id}`} defaultValue="60" style={{...S.input, width:"100px", padding:"6px 8px", fontSize:"11px", cursor:"pointer"}}>
+                                  <option value="15">15 perc</option>
+                                  <option value="30">30 perc</option>
+                                  <option value="45">45 perc</option>
+                                  <option value="60">1 óra</option>
+                                  <option value="90">1,5 óra</option>
+                                  <option value="120">2 óra</option>
+                                  <option value="180">3 óra</option>
+                                  <option value="240">4 óra</option>
+                                </select>
+                                <input type="text" id={`ablk_reason_${s.id}`} placeholder="megnevezés" style={{...S.input, flex:1, minWidth:"90px", padding:"6px 10px", fontSize:"11px"}} />
+                                <button style={{...S.btnSec, fontSize:"11px"}} onClick={() => {
+                                  const date = document.getElementById(`ablk_date_${s.id}`).value;
+                                  const from = document.getElementById(`ablk_from_${s.id}`).value;
+                                  const dur = +document.getElementById(`ablk_dur_${s.id}`).value;
+                                  const reason = document.getElementById(`ablk_reason_${s.id}`).value;
+                                  if (!date || !from) { showToast("Adj meg dátumot és kezdő időt!", "error"); return; }
+                                  const endMin = timeToMinutes(from) + dur;
+                                  const to = `${String(Math.floor(endMin/60)).padStart(2,"0")}:${String(endMin%60).padStart(2,"0")}`;
+                                  saveStylist({...s, blocks: [...(s.blocks || []), {date, from, to, reason}]});
+                                  document.getElementById(`ablk_date_${s.id}`).value = "";
+                                  document.getElementById(`ablk_reason_${s.id}`).value = "";
+                                  showToast("Elfoglaltság hozzáadva");
+                                }}>+</button>
+                              </div>
+                            </div>
+
                             {/* Szolgáltatások konfigurálása */}
                             <div style={{marginTop:"14px", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>
                               <div style={{fontSize:"11px", color:C.sub, marginBottom:"8px", letterSpacing:"0.1em", fontWeight:"700"}}>💈 SZOLGÁLTATÁSOK (egyéni idő/ár)</div>
@@ -2794,6 +2846,57 @@ function App() {
                       <option value={90}>3 hónap (90 nap)</option>
                     </select>
                     <div style={{fontSize:"11px", color:C.accent, marginTop:"8px"}}>Jelenleg: {me.bookingHorizonDays || 30} napra előre foglalhatnak hozzád.</div>
+                  </div>
+
+                  {/* Egyéb elfoglaltság */}
+                  <div style={S.card}>
+                    <span style={S.label}>⛔ Egyéb elfoglaltság</span>
+                    <div style={{fontSize:"11px", color:C.textDim, marginBottom:"12px"}}>Add meg mikor NEM vagy elérhető egy adott napon (pl. ebéd, intézkedés). Erre az idősávra senki nem tud hozzád foglalni. Csak ha szeretnéd – bármikor hozzáadható és törölhető.</div>
+                    {(me.blocks || []).length === 0 ? (
+                      <div style={{fontSize:"12px", color:C.muted, marginBottom:"10px"}}>Nincs rögzített elfoglaltság.</div>
+                    ) : (
+                      (me.blocks || []).slice().sort((a,b)=> (a.date+a.from).localeCompare(b.date+b.from)).map((b, i) => {
+                        const realIdx = (me.blocks || []).indexOf(b);
+                        return (
+                          <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:C.surfaceAlt, borderRadius:"6px", marginBottom:"6px"}}>
+                            <span style={{fontSize:"13px"}}>⛔ {b.date} · {b.from}–{b.to}{b.reason ? ` · ${b.reason}` : ""}</span>
+                            <button style={S.btnIcon} onClick={() => saveStylist({...me, blocks: me.blocks.filter((_,j)=>j!==realIdx)})}>✕</button>
+                          </div>
+                        );
+                      })
+                    )}
+                    <div style={{display:"flex", flexDirection:"column", gap:"6px", marginTop:"10px"}}>
+                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap"}}>
+                        <input type="date" id={`blk_date_${me.id}`} style={{...S.input, flex:1, minWidth:"130px"}} />
+                        <input type="time" id={`blk_from_${me.id}`} defaultValue="12:00" style={{...S.input, width:"110px"}} />
+                        <select id={`blk_dur_${me.id}`} defaultValue="60" style={{...S.input, width:"120px", cursor:"pointer"}}>
+                          <option value="15">15 perc</option>
+                          <option value="30">30 perc</option>
+                          <option value="45">45 perc</option>
+                          <option value="60">1 óra</option>
+                          <option value="90">1,5 óra</option>
+                          <option value="120">2 óra</option>
+                          <option value="180">3 óra</option>
+                          <option value="240">4 óra</option>
+                        </select>
+                      </div>
+                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap"}}>
+                        <input type="text" id={`blk_reason_${me.id}`} placeholder="Megnevezés (pl. ebéd) – nem kötelező" style={{...S.input, flex:1, minWidth:"140px"}} />
+                        <button style={S.btnSec} onClick={() => {
+                          const date = document.getElementById(`blk_date_${me.id}`).value;
+                          const from = document.getElementById(`blk_from_${me.id}`).value;
+                          const dur = +document.getElementById(`blk_dur_${me.id}`).value;
+                          const reason = document.getElementById(`blk_reason_${me.id}`).value;
+                          if (!date || !from) { showToast("Adj meg dátumot és kezdő időt!", "error"); return; }
+                          const endMin = timeToMinutes(from) + dur;
+                          const to = `${String(Math.floor(endMin/60)).padStart(2,"0")}:${String(endMin%60).padStart(2,"0")}`;
+                          saveStylist({...me, blocks: [...(me.blocks || []), {date, from, to, reason}]});
+                          document.getElementById(`blk_date_${me.id}`).value = "";
+                          document.getElementById(`blk_reason_${me.id}`).value = "";
+                          showToast("Elfoglaltság hozzáadva – erre az időre nem foglalhatnak");
+                        }}>+ Hozzáad</button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Szabadság */}
