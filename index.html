@@ -1015,7 +1015,7 @@ function App() {
     const initials = newStylist.initials || newStylist.name.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase();
     const colors = ["#e8d5d5","#b8dfe0","#c8e6c8","#d8d8d8","#e8c8e0","#f0e0c0","#d0c8e8"];
     const color = colors[stylists.length % colors.length];
-    setStylists(prev => [...prev, { id: Date.now(), name: newStylist.name, title: "Barber", initials, color, email: newStylist.email || "", password: newStylist.password || "barber123", hours: EMPTY_HOURS, vacation: [] }]);
+    setStylists(prev => [...prev, { id: Date.now(), name: newStylist.name, title: "Barber", initials, color, email: newStylist.email || "", password: newStylist.password || "barber123", hours: EMPTY_HOURS, vacation: [], bookingHorizonDays: 30 }]);
     setNewStylist({ name: "", initials: "", email: "", password: "" }); setShowAddStylist(false); showToast("Hozzáadva — a barber a 'Saját adatok' fülön állítsa be a munkaidejét");
   }
   function deleteStylist(id) { if (!confirm("Biztosan törlöd?")) return; setStylists(prev => prev.filter(s => s.id !== id)); showToast("Törölve"); }
@@ -1130,6 +1130,8 @@ function App() {
 
   const weekStart = addDays(today, calOffset * 7);
   const weekDays = Array.from({length:7}, (_,i) => addDays(weekStart, i));
+  // Meddig előre lehet foglalni: a barberek közül a leghosszabb előfoglalási ablak (alap: 30 nap)
+  const maxHorizonDays = stylists.length ? Math.max(...stylists.map(s => s.bookingHorizonDays || 30)) : 30;
   const adminWeekStart = addDays(today, adminWeekOffset * 7);
   const adminWeekDays = Array.from({length:7}, (_,i) => addDays(adminWeekStart, i));
   const todayStr = formatDate(today);
@@ -1418,7 +1420,8 @@ function App() {
                   const isPast = d < today;
                   const isSel = ds === selectedDate;
                   const isSunday = d.getDay() === 0;
-                  const disabled = isPast || isSunday;
+                  const beyondHorizon = d > addDays(today, maxHorizonDays);
+                  const disabled = isPast || isSunday || beyondHorizon;
                   return (
                     <button key={ds} disabled={disabled}
                       onClick={() => setSelectedDate(ds)}
@@ -1441,7 +1444,9 @@ function App() {
               <span style={S.label}>{T.chooseBarber}</span>
               <div className="scroll-x" style={{display:"flex", gap:"6px"}}>
                 {stylists.map(s => {
-                  const working = isStylistWorking(s.id, selectedDate);
+                  const horizon = s.bookingHorizonDays || 30;
+                  const withinHorizon = parseDate(selectedDate) <= addDays(today, horizon);
+                  const working = isStylistWorking(s.id, selectedDate) && withinHorizon;
                   return (
                     <button key={s.id} style={{...S.chip(form.stylist===s.id), opacity: working ? 1 : 0.35}}
                       onClick={() => working && setForm(f=>({...f, stylist:s.id, service: null, time:""}))} disabled={!working}>
@@ -2758,6 +2763,22 @@ function App() {
                         )}
                       </div>
                     ))}
+                  </div>
+
+                  {/* Előfoglalási ablak */}
+                  <div style={S.card}>
+                    <span style={S.label}>📅 Meddig előre foglalhatnak</span>
+                    <div style={{fontSize:"11px", color:C.textDim, marginBottom:"12px"}}>Ennyivel előre tudnak hozzád időpontot foglalni a vendégek. Ezt te állítod be magadnak, a többi barbertől függetlenül.</div>
+                    <select style={{...S.input, cursor:"pointer"}} value={me.bookingHorizonDays || 30} onChange={e => saveStylist({...me, bookingHorizonDays: +e.target.value})}>
+                      <option value={7}>1 hét (7 nap)</option>
+                      <option value={14}>2 hét (14 nap)</option>
+                      <option value={21}>3 hét (21 nap)</option>
+                      <option value={30}>1 hónap (30 nap)</option>
+                      <option value={45}>6 hét (45 nap)</option>
+                      <option value={60}>2 hónap (60 nap)</option>
+                      <option value={90}>3 hónap (90 nap)</option>
+                    </select>
+                    <div style={{fontSize:"11px", color:C.accent, marginTop:"8px"}}>Jelenleg: {me.bookingHorizonDays || 30} napra előre foglalhatnak hozzád.</div>
                   </div>
 
                   {/* Szabadság */}
