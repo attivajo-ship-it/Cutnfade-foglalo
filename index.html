@@ -698,6 +698,16 @@ function App() {
     return stylist.hours?.[WEEKDAY_KEYS[parseDate(dateStr).getDay()]];
   }
 
+  // Online foglalhatósági időszak: ha a barber megadott tól-ig dátumot, az dominál;
+  // különben a gördülő "X nap" (bookingHorizonDays, alap 30).
+  function isWithinBookingWindow(stylist, dateStr) {
+    if (!stylist) return false;
+    const todayS = formatDate(today);
+    const from = stylist.bookingFrom || todayS;
+    const until = stylist.bookingUntil || formatDate(addDays(today, stylist.bookingHorizonDays || 30));
+    return dateStr >= from && dateStr <= until;
+  }
+
   // Időpontok között eltelt percek számítása
   function timeToMinutes(t) {
     const [h, m] = t.split(":").map(Number);
@@ -720,6 +730,8 @@ function App() {
   function isSlotAvailable(stylistId, dateStr, time, durationMinutes = 15, excludeBookingId = null, ignoreHours = false) {
     if (!ignoreHours) {
       if (!isStylistWorking(stylistId, dateStr)) return false;
+      const stWin = stylists.find(s => s.id === stylistId);
+      if (stWin && !isWithinBookingWindow(stWin, dateStr)) return false;
       const hours = getStylistHours(stylistId, dateStr);
       if (!hours || hours.off) return false;
       if (time < hours.open) return false;
@@ -1154,7 +1166,9 @@ function App() {
   const weekStart = addDays(today, calOffset * 7);
   const weekDays = Array.from({length:7}, (_,i) => addDays(weekStart, i));
   // Meddig előre lehet foglalni: a barberek közül a leghosszabb előfoglalási ablak (alap: 30 nap)
-  const maxHorizonDays = stylists.length ? Math.max(...stylists.map(s => s.bookingHorizonDays || 30)) : 30;
+  const maxBookingDate = stylists.length
+    ? stylists.map(s => s.bookingUntil || formatDate(addDays(today, s.bookingHorizonDays || 30))).sort().slice(-1)[0]
+    : formatDate(addDays(today, 30));
   const adminWeekStart = addDays(today, adminWeekOffset * 7);
   const adminWeekDays = Array.from({length:7}, (_,i) => addDays(adminWeekStart, i));
   const todayStr = formatDate(today);
@@ -1443,7 +1457,7 @@ function App() {
                   const isPast = d < today;
                   const isSel = ds === selectedDate;
                   const isSunday = d.getDay() === 0;
-                  const beyondHorizon = d > addDays(today, maxHorizonDays);
+                  const beyondHorizon = formatDate(d) > maxBookingDate;
                   const disabled = isPast || isSunday || beyondHorizon;
                   return (
                     <button key={ds} disabled={disabled}
@@ -1467,9 +1481,7 @@ function App() {
               <span style={S.label}>{T.chooseBarber}</span>
               <div className="scroll-x" style={{display:"flex", gap:"6px"}}>
                 {stylists.map(s => {
-                  const horizon = s.bookingHorizonDays || 30;
-                  const withinHorizon = parseDate(selectedDate) <= addDays(today, horizon);
-                  const working = isStylistWorking(s.id, selectedDate) && withinHorizon;
+                  const working = isStylistWorking(s.id, selectedDate) && isWithinBookingWindow(s, selectedDate);
                   return (
                     <button key={s.id} style={{...S.chip(form.stylist===s.id), opacity: working ? 1 : 0.35}}
                       onClick={() => working && setForm(f=>({...f, stylist:s.id, service: null, time:""}))} disabled={!working}>
@@ -2077,6 +2089,7 @@ function App() {
                               const firstHourMin = timeToMinutes(CAL_START);
                               const topPx = Math.max(0, (startMin - firstHourMin) * 56 / 60);
                               const heightPx = Math.max(0, (endMin - Math.max(startMin, firstHourMin)) * 56 / 60);
+                              const onlineOpen = isWithinBookingWindow(stylists.find(st=>st.id===s.id), adminDate);
                               return (
                                 <div style={{
                                   position:"absolute",
@@ -2084,9 +2097,13 @@ function App() {
                                   left:0,
                                   right:0,
                                   height: `${heightPx}px`,
-                                  background: s.color,
+                                  background: onlineOpen ? s.color : `repeating-linear-gradient(45deg, ${s.color}, ${s.color} 9px, ${s.color}55 9px, ${s.color}55 18px)`,
                                   zIndex: 0,
-                                }}></div>
+                                }}>
+                                  {!onlineOpen && (
+                                    <div style={{position:"absolute", top:"6px", left:"50%", transform:"translateX(-50%)", fontSize:"10px", fontWeight:"700", color:"#0a0a0a", background:"rgba(255,255,255,0.85)", padding:"3px 8px", borderRadius:"4px", whiteSpace:"nowrap"}}>🔒 Online foglalás zárva</div>
+                                  )}
+                                </div>
                               );
                             })()}
 
@@ -2571,6 +2588,15 @@ function App() {
                                 <option value={60}>2 hónap (60 nap)</option>
                                 <option value={90}>3 hónap (90 nap)</option>
                               </select>
+                              <div style={{fontSize:"11px", color:C.textDim, fontWeight:"700", marginTop:"10px", marginBottom:"4px"}}>📆 VAGY konkrét időszak (-tól -ig):</div>
+                              <div style={{display:"flex", gap:"6px", flexWrap:"wrap", alignItems:"center"}}>
+                                <input type="date" value={s.bookingFrom || ""} onChange={e => saveStylist({...s, bookingFrom: e.target.value})} style={{...S.input, flex:1, minWidth:"110px", padding:"6px 10px", fontSize:"11px"}} />
+                                <span style={{fontSize:"11px", color:C.sub}}>–</span>
+                                <input type="date" value={s.bookingUntil || ""} onChange={e => saveStylist({...s, bookingUntil: e.target.value})} style={{...S.input, flex:1, minWidth:"110px", padding:"6px 10px", fontSize:"11px"}} />
+                              </div>
+                              {(s.bookingFrom || s.bookingUntil) && (
+                                <button onClick={() => saveStylist({...s, bookingFrom: "", bookingUntil: ""})} style={{...S.btnSec, marginTop:"6px", fontSize:"11px"}}>↺ Időszak törlése</button>
+                              )}
                             </div>
 
                             {/* Szolgáltatások konfigurálása */}
@@ -2838,6 +2864,18 @@ function App() {
                       <option value={90}>3 hónap (90 nap)</option>
                     </select>
                     <div style={{fontSize:"11px", color:C.accent, marginTop:"8px"}}>Jelenleg: {me.bookingHorizonDays || 30} napra előre foglalhatnak hozzád.</div>
+                    <div style={{marginTop:"14px", paddingTop:"12px", borderTop:`1px solid ${C.borderLight}`}}>
+                      <div style={{fontSize:"11px", color:C.textDim, fontWeight:"700", marginBottom:"4px"}}>📆 VAGY konkrét időszak (-tól -ig):</div>
+                      <div style={{fontSize:"11px", color:C.textDim, marginBottom:"8px"}}>Ha kitöltöd, CSAK ebben az időszakban foglalhatnak hozzád online (felülírja a fenti napokat). Üresen hagyva a fenti "X nap" érvényes. Így te nyithatod meg időszakonként a foglalhatóságot.</div>
+                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap", alignItems:"center"}}>
+                        <input type="date" value={me.bookingFrom || ""} onChange={e => saveStylist({...me, bookingFrom: e.target.value})} style={{...S.input, flex:1, minWidth:"130px"}} />
+                        <span style={{fontSize:"12px", color:C.sub}}>–</span>
+                        <input type="date" value={me.bookingUntil || ""} onChange={e => saveStylist({...me, bookingUntil: e.target.value})} style={{...S.input, flex:1, minWidth:"130px"}} />
+                      </div>
+                      {(me.bookingFrom || me.bookingUntil) && (
+                        <button onClick={() => saveStylist({...me, bookingFrom: "", bookingUntil: ""})} style={{...S.btnSec, marginTop:"8px", fontSize:"11px"}}>↺ Időszak törlése (vissza a gördülő ablakra)</button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Szabadság */}
