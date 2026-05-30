@@ -1019,42 +1019,29 @@ function App() {
   async function tryAdminLogin() {
     setPinError(false);
     const email = (loginEmail || "").trim();
-    // 1) ELSŐDLEGES: Supabase Auth (titkosított, profi)
-    if (sb) {
+    if (!sb) { setPinError(true); return; }
+    try {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password: loginPassword });
+      if (error || !data || !data.user) { setPinError(true); return; }
+      // szerepkör az app_users táblából
+      let role = "admin", sid = null;
       try {
-        const { data, error } = await sb.auth.signInWithPassword({ email, password: loginPassword });
-        if (!error && data && data.user) {
-          // szerepkör az app_users táblából
-          let role = "admin", sid = null;
-          try {
-            const { data: au } = await sb.from("app_users").select("role, stylist_ext_id").eq("email", email).single();
-            if (au) { role = au.role || "admin"; sid = au.stylist_ext_id; }
-          } catch {}
-          if (role === "stylist") {
-            const local = stylists.find(s => String(s.id) === String(sid));
-            setAuthRole("stylist");
-            setAuthStylistId(local ? local.id : (sid ? Number(sid) : null));
-            setAdminTab("calendar");
-          } else {
-            setAuthRole("admin");
-            setAuthStylistId(null);
-          }
-          setLoginEmail(""); setLoginPassword("");
-          return;
-        }
-      } catch (e) { /* megyünk a vészkijáratra */ }
+        const { data: au } = await sb.from("app_users").select("role, stylist_ext_id").eq("email", email).single();
+        if (au) { role = au.role || "admin"; sid = au.stylist_ext_id; }
+      } catch {}
+      if (role === "stylist") {
+        const local = stylists.find(s => String(s.id) === String(sid));
+        setAuthRole("stylist");
+        setAuthStylistId(local ? local.id : (sid ? Number(sid) : null));
+        setAdminTab("calendar");
+      } else {
+        setAuthRole("admin");
+        setAuthStylistId(null);
+      }
+      setLoginEmail(""); setLoginPassword("");
+    } catch (e) {
+      setPinError(true);
     }
-    // 2) VÉSZKIJÁRAT: régi belépés (amíg az Auth biztosan működik)
-    if (email === settings.adminEmail && loginPassword === settings.adminPassword) {
-      setAuthRole("admin"); setAuthStylistId(null);
-      setLoginEmail(""); setLoginPassword(""); return;
-    }
-    const stylist = stylists.find(s => s.email === email && s.password === loginPassword);
-    if (stylist) {
-      setAuthRole("stylist"); setAuthStylistId(stylist.id);
-      setLoginEmail(""); setLoginPassword(""); setAdminTab("calendar"); return;
-    }
-    setPinError(true);
   }
 
   function tryClientLogin() {
