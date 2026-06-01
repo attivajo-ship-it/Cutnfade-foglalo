@@ -382,9 +382,21 @@ function App() {
         await syncBookingsUp(bookingsRef.current);
         return;
       }
+      // AUTOMATIKUS TÖRLÉS: a beállított napnál régebbi foglalásokat ne mutassuk,
+      // és biztonságosan (konkrét ext_id-k alapján) töröljük a DB-ből is.
+      let visible = downloaded;
+      const adDays = (settingsRef.current && settingsRef.current.autoDeleteDays) || 0;
+      if (adDays > 0) {
+        const cutoff = formatDate(addDays(getToday(), -adDays));
+        const old = downloaded.filter(b => b && b.date && b.date < cutoff);
+        visible = downloaded.filter(b => !(b && b.date && b.date < cutoff));
+        if (old.length > 0) {
+          try { await sb.from("bookings").delete().eq("salon_id", salonId).in("ext_id", old.map(b => String(b.id))); } catch (e) {}
+        }
+      }
       syncingRef.current = true; // jelezzük: ez letöltésből jön, ne küldjük vissza
-      prevExtIdsRef.current = new Set(downloaded.map(b => String(b.id)));
-      setBookings(downloaded);
+      prevExtIdsRef.current = new Set(visible.map(b => String(b.id)));
+      setBookings(visible);
     } catch (err) {
       console.error("Szinkron (le) hiba:", err);
     }
