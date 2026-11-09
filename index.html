@@ -33,7 +33,14 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <script type="text/babel" data-presets="react" data-type="module">
+  <!-- JSX classic runtime: a globális React.createElement-et használja, nem importál "react/jsx-runtime"-ot -->
+  <script>
+    Babel.registerPreset('react-classic', {
+      presets: [[Babel.availablePresets.react, { runtime: 'classic' }]]
+    });
+  </script>
+
+  <script type="text/babel" data-presets="react-classic" data-type="module">
 
 // === FORDÍTÁSOK (vendég oldal) ===
 const TRANSLATIONS = {
