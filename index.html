@@ -977,11 +977,13 @@ function App() {
       const existingSlots = getBookingSlots(b.time, b.duration || 30);
       return newSlots.some(s => existingSlots.includes(s));
     });
-    if (conflict) {
-      showToast("Foglalt!", "error"); setDragging(null); return;
-    }
     const stylist = stylists.find(s => s.id === stylistId);
-    if (settings.confirmMoves) {
+    // ADMIN/FODRÁSZ: dupla foglalás engedélyezett (rácsúsztatás meglévő foglalásra), de rákérdezünk.
+    // FONTOS: ez a függvény CSAK az admin naptárban fut. Az online (vendég) foglalásnál
+    // a vendég csak a SZABAD sávokból választhat, ezért vendég nem tud foglaltra foglalni.
+    if (conflict) {
+      if (!confirm(`⚠️ Erre az idősávra már van foglalás.\nRáteszed mégis (dupla foglalás)?\n\n${dragging.clientName}\n${dateStr} ${time} · ${stylist?.name || ""}`)) { setDragging(null); return; }
+    } else if (settings.confirmMoves) {
       if (!confirm(`Áthelyezed ide?\n\n${dragging.clientName}\n${dateStr} ${time} · ${stylist?.name}`)) { setDragging(null); return; }
     }
     setBookings(prev => prev.map(b => b.id === dragging.id ? {...b, date: dateStr, time, stylistId, stylist: stylist?.name || b.stylist} : b));
