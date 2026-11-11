@@ -241,7 +241,7 @@ function App() {
     instagram: "https://www.instagram.com/cutnfade.nyiregyhaza/",
     facebook: "https://www.facebook.com/cutnfade.nyiregyhaza/",
     adminEmail: "admin@cutnfade-nyiregyhaza.hu",
-    adminPassword: "",
+
     pin: "1234", // backward compat
     notifyEnabled: true,
     reminderHours: 24,
@@ -256,11 +256,11 @@ function App() {
   }));
 
   const [stylists, setStylists] = React.useState(() => load("cnf_stylists", [
-    { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
-    { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
-    { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
-    { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
-    { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
+    { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
+    { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
+    { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
+    { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
   ]));
 
   const [services, setServices] = React.useState(() => load("cnf_services", [
@@ -745,7 +745,8 @@ function App() {
         const rows = list.map((s, i) => ({
           salon_id: salonId, ext_id: String(s.id),
           name: s.name || "", initials: s.initials || "", color: s.color || "#888888",
-          email: s.email || null, sort_order: i, raw: s,
+          email: s.email || null, sort_order: i,
+          raw: (({ password, ...rest }) => rest)(s),   // régi jelszómező soha ne kerüljön fel
         }));
         const { error } = await sb.from("stylists").upsert(rows, { onConflict: "salon_id,ext_id" });
         if (error) throw error;
@@ -868,7 +869,7 @@ function App() {
     if (!sb || !salonId || !staffMode || !settingsLoadedRef.current) return;
     try {
       const { error } = await sb.from("salons")
-        .update({ settings: obj, theme: obj.theme || "mono" })
+        .update({ settings: (({ adminPassword, pin, ...rest }) => rest)(obj), theme: obj.theme || "mono" })
         .eq("id", salonId);
       if (error) throw error;
     } catch (err) { console.error("Beállítás szinkron (fel) hiba:", err); }
@@ -1407,8 +1408,8 @@ function App() {
     const initials = newStylist.initials || newStylist.name.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase();
     const colors = ["#e8d5d5","#b8dfe0","#c8e6c8","#d8d8d8","#e8c8e0","#f0e0c0","#d0c8e8"];
     const color = colors[stylists.length % colors.length];
-    setStylists(prev => [...prev, { id: Date.now(), name: newStylist.name, title: "Barber", initials, color, email: newStylist.email || "", password: newStylist.password || "", hours: EMPTY_HOURS, vacation: [], bookingHorizonDays: 30 }]);
-    setNewStylist({ name: "", initials: "", email: "", password: "" }); setShowAddStylist(false); showToast("Hozzáadva — a barber a 'Saját adatok' fülön állítsa be a munkaidejét");
+    setStylists(prev => [...prev, { id: Date.now(), name: newStylist.name, title: "Barber", initials, color, email: newStylist.email || "", hours: EMPTY_HOURS, vacation: [], bookingHorizonDays: 30 }]);
+    setNewStylist({ name: "", initials: "", email: "" }); setShowAddStylist(false); showToast("Hozzáadva — a barber a 'Saját adatok' fülön állítsa be a munkaidejét");
   }
   function deleteStylist(id) { if (!confirm("Biztosan törlöd?")) return; setStylists(prev => prev.filter(s => s.id !== id)); showToast("Törölve"); }
   function saveStylist(s) { setStylists(prev => prev.map(x => x.id === s.id ? s : x)); setEditingStylist(null); showToast("Mentve"); }
@@ -3555,11 +3556,11 @@ function App() {
                   <button style={{...S.btnSec, width:"100%"}} onClick={() => {
                     if (!confirm("Visszaállítod a barbereket az alapértelmezett adatokra?")) return;
                     setStylists([
-                      { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
-                      { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
-                      { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
-                      { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
-                      { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
+                      { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
+                      { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
+                      { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
+                      { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
                     ]);
                     showToast("Barberek visszaállítva");
                   }}>🔄 Barberek visszaállítása</button>
