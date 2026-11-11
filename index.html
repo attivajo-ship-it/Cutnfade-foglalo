@@ -1562,7 +1562,7 @@ function App() {
     header: { background: C.isLight ? C.surface : "linear-gradient(180deg, #141414 0%, #0a0a0a 100%)", borderBottom: `1px solid ${C.border}`, padding: "16px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"12px" },
     logo: { fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: "20px", fontWeight: "400", letterSpacing: "0.15em", color: C.text },
     logoAccent: { color: C.accent },
-    main: { maxWidth: view === "admin" && adminUnlocked ? "1600px" : "1100px", margin: "0 auto", padding: "20px 16px" },
+    main: { maxWidth: view === "admin" && adminUnlocked ? "none" : "1100px", margin: "0 auto", padding: view === "admin" && adminUnlocked ? "20px 24px" : "20px 16px" },
     card: { background: C.surface, borderRadius: "8px", padding: "20px", marginBottom: "12px", border: `1px solid ${C.border}` },
     cardHero: C.isLight
       ? { background: "transparent", padding: "18px 4px 8px", marginBottom: "8px", textAlign:"left", position:"relative" }
@@ -1642,6 +1642,20 @@ function App() {
         button:disabled { opacity: 0.3; cursor: not-allowed; }
         .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .hdr-name { white-space: nowrap; }
+        .admin-layout { display: flex; gap: 20px; align-items: flex-start; }
+        .admin-side { width: 230px; flex-shrink: 0; position: sticky; top: 12px; }
+        .admin-content { flex: 1; min-width: 0; }
+        .admin-tabs { display: flex; flex-direction: column; gap: 2px; }
+        .admin-tab { text-align: left; width: 100%; }
+        .admin-side-mobile-logout { display: none; }
+        @media (max-width: 900px) {
+          .admin-layout { flex-direction: column; gap: 0; }
+          .admin-side { width: 100%; position: static; }
+          .admin-tabs { flex-direction: row; overflow-x: auto; }
+          .admin-tab { width: auto; white-space: nowrap; }
+          .admin-side-logout { display: none; }
+          .admin-side-mobile-logout { display: inline-block; }
+        }
         @media (max-width: 520px) { .hdr-sub { display: none !important; } .hdr-name { font-size: 20px !important; } .hdr-logo { width: 38px !important; height: 38px !important; } }
         .barber-pick { background: none; border: none; padding: 4px 2px; cursor: pointer; text-align: center; min-width: 64px; font-family: inherit; color: inherit; }
         .barber-pick:disabled { cursor: not-allowed; }
@@ -2130,9 +2144,11 @@ function App() {
 
         {/* ============ ADMIN ============ */}
         {view === "admin" && adminUnlocked && (
-          <>
+          <div className="admin-layout">
+            {/* BAL OLDALI SÁV: felhasználó + menü + kilépés (telefonon felül, vízszintesen) */}
+            <aside className="admin-side">
             {/* USER INFO + LOGOUT */}
-            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px", padding:"10px 14px", background:C.surface, borderRadius:"6px", border:`1px solid ${C.border}`}}>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px", padding:"10px 14px", background:C.surface, borderRadius:"10px", border:`1px solid ${C.border}`}}>
               <div style={{display:"flex", alignItems:"center", gap:"10px"}}>
                 {isAdmin ? (
                   <>
@@ -2155,10 +2171,10 @@ function App() {
                   );
                 })()}
               </div>
-              <button style={S.btnSec} onClick={logout}>🔓 Kijelentkezés</button>
+              <button className="admin-side-mobile-logout" style={{...S.btnSec, padding:"6px 10px"}} onClick={logout} title="Kijelentkezés">🔓</button>
             </div>
 
-            <div className="scroll-x" style={{display:"flex", gap:"2px", marginBottom:"16px", background:C.surface, padding:"4px", borderRadius:"6px", border:`1px solid ${C.border}`}}>
+            <nav className="admin-tabs" style={{marginBottom:"16px", background:C.surface, padding:"6px", borderRadius:"10px", border:`1px solid ${C.border}`}}>
               {(() => {
                 const allTabs = [
                   {id:"calendar", label:"📅 Naptár", roles:["admin","stylist"]},
@@ -2172,13 +2188,17 @@ function App() {
                   {id:"settings", label:"⚙️ Beállítás", roles:["admin"]},
                 ];
                 return allTabs.filter(t => t.roles.includes(authRole)).map(t => (
-                  <button key={t.id} onClick={() => setAdminTab(t.id)}
-                    style={{...S.navBtn(adminTab===t.id), whiteSpace:"nowrap", fontSize:"10px"}}>
+                  <button key={t.id} className="admin-tab" onClick={() => setAdminTab(t.id)} aria-current={adminTab===t.id ? "page" : undefined}
+                    style={{...S.navBtn(adminTab===t.id), fontSize:"12px", padding:"10px 12px", borderRadius:"8px", letterSpacing:"0.06em"}}>
                     {t.label}
                   </button>
                 ));
               })()}
-            </div>
+            </nav>
+            <button className="admin-side-logout" style={{...S.btnSec, width:"100%"}} onClick={logout}>🔓 Kijelentkezés</button>
+            </aside>
+
+            <div className="admin-content">
 
             {/* DASHBOARD */}
             {adminTab === "dashboard" && (
@@ -2523,14 +2543,14 @@ function App() {
                             {working && parseDate(adminDate) >= today && (
                               <button
                                 onClick={() => openQuickBooking(adminDate, "", s.id)}
-                                style={{position:"absolute", top:"6px", right:"6px", width:"26px", height:"26px", borderRadius:"50%", background:"#0a0a0a", color:"#fff", border:"none", fontSize:"16px", fontWeight:"700", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1}}>
+                                style={{position:"absolute", top:"6px", right:"6px", width:"26px", height:"26px", borderRadius:"50%", background: C.isLight ? C.accent : "#0a0a0a", color:"#fff", border:"none", fontSize:"16px", fontWeight:"700", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1}}>
                                 +
                               </button>
                             )}
                           </div>
 
                           {/* Idő-rács (egy folytonos vászon) */}
-                          <div data-grid style={{position:"relative", background: C.borderLight, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, height: `${CAL_ROWS * 56}px`}}>
+                          <div data-grid style={{position:"relative", background: C.isLight ? "#eef1ef" : C.borderLight, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, height: `${CAL_ROWS * 56}px`}}>
 
                             {/* MUNKAIDŐ SÁVA - csak akkor látszik amikor dolgozik */}
                             {working && (() => {
@@ -2549,7 +2569,9 @@ function App() {
                                   left:0,
                                   right:0,
                                   height: `${heightPx}px`,
-                                  background: onlineOpen ? s.color : `repeating-linear-gradient(45deg, ${s.color}, ${s.color} 9px, ${s.color}55 9px, ${s.color}55 18px)`,
+                                  background: C.isLight
+                                    ? (onlineOpen ? "#ffffff" : "repeating-linear-gradient(45deg, #ffffff, #ffffff 9px, #f1f4f2 9px, #f1f4f2 18px)")
+                                    : (onlineOpen ? s.color : `repeating-linear-gradient(45deg, ${s.color}, ${s.color} 9px, ${s.color}55 9px, ${s.color}55 18px)`),
                                   zIndex: 0,
                                 }}>
                                   {!onlineOpen && (
@@ -2806,23 +2828,37 @@ function App() {
                                     // Húzás közben "átlátszó" az egérnek: így a rács kapja az ejtést akkor is,
                                     // ha a kurzor egy másik foglalás vagy a saját régi helye fölött van.
                                     pointerEvents: dragging ? "none" : undefined,
-                                    opacity: dragging && dragging.id === b.id ? 0.45 : 1,
-                                    background: touchDragging?.id === b.id ? C.accent : b.status==="completed" ? "#7cb87c" : b.status==="noshow" ? "#dc4a3d" : "#f4a89f",
-                                    color: "#1a1a1a",
-                                    borderRadius:"3px",
-                                    padding:"3px 5px",
+                                    opacity: (dragging && dragging.id === b.id) ? 0.45 : touchDragging?.id === b.id ? 0.7 : 1,
+                                    ...(C.isLight ? {
+                                      // Világos téma: fehér kártya, bal oldalon a barber színe; a státuszt a háttér + jel mutatja
+                                      background: touchDragging?.id === b.id ? "#e3f4ec" : b.status==="completed" ? "#eaf6ee" : b.status==="noshow" ? "#fdecea" : "#ffffff",
+                                      color: C.text,
+                                      borderRadius:"6px",
+                                      padding:"3px 6px 3px 8px",
+                                      border: `1px solid ${touchDragging?.id === b.id ? C.accent : C.border}`,
+                                      borderLeft: `5px solid ${b.status==="noshow" ? C.danger : (s.color || C.accent)}`,
+                                      boxShadow: "0 1px 2px rgba(20,26,23,0.06)",
+                                    } : {
+                                      background: touchDragging?.id === b.id ? C.accent : b.status==="completed" ? "#7cb87c" : b.status==="noshow" ? "#dc4a3d" : "#f4a89f",
+                                      color: "#1a1a1a",
+                                      borderRadius:"3px",
+                                      padding:"3px 5px",
+                                      border: touchDragging?.id === b.id ? "2px solid #fff" : "1px solid rgba(0,0,0,0.2)",
+                                    }),
                                     fontSize:"10px",
                                     fontWeight:"700",
                                     overflow:"hidden",
-                                    border: touchDragging?.id === b.id ? "2px solid #fff" : "1px solid rgba(0,0,0,0.2)",
                                     cursor:"grab",
                                     zIndex: touchDragging?.id === b.id ? 5 : 2,
-                                    opacity: touchDragging?.id === b.id ? 0.7 : 1,
                                     touchAction: "none",
                                   }}>
-                                  <div style={{fontSize:"10px", fontWeight:"700"}}>{b.time} – {endTime}</div>
-                                  <div style={{fontSize:"10px", fontWeight:"600"}}>{b.clientName}</div>
-                                  <div style={{fontSize:"9px", opacity:0.8, fontWeight:"500"}}>{b.service}</div>
+                                  <div style={{fontSize:"10px", fontWeight:"700", display:"flex", justifyContent:"space-between", gap:"4px"}}>
+                                    <span>{b.time} – {endTime}</span>
+                                    {C.isLight && b.status === "completed" && <span style={{color:C.success}} title="Teljesítve">✓</span>}
+                                    {C.isLight && b.status === "noshow" && <span style={{color:C.danger}} title="Nem jelent meg">✗</span>}
+                                  </div>
+                                  <div style={{fontSize: C.isLight ? "11px" : "10px", fontWeight: C.isLight ? "700" : "600", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{b.clientName}</div>
+                                  <div style={{fontSize:"9px", opacity:0.8, fontWeight:"500", color: C.isLight ? C.sub : undefined, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{b.service}</div>
                                 </div>
                               );
                             })}
@@ -3553,7 +3589,8 @@ function App() {
                 </div>
               </>
             )}
-          </>
+            </div>
+          </div>
         )}
       </div>
 
