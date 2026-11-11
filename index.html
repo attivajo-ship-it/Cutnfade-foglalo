@@ -1320,11 +1320,11 @@ function App() {
     const sid = stylistId || stylists[0]?.id;
     const stylistSvcs = getStylistServices(sid);
     setQuickBooking({ date, stylistId: sid });
-    setQuickForm({ clientPhone:"", clientName:"", serviceId: stylistSvcs[0]?.id || services[0]?.id || 1, serviceIds: [stylistSvcs[0]?.id || services[0]?.id || 1], note:"", isNew:false, time: time || "", repeat: "none", repeatCount: 4, mode: "booking", blockDur: 60, blockReason: "" });
+    setQuickForm({ clientPhone:"", clientName:"", clientEmail:"", sendConfirm:true, serviceId: stylistSvcs[0]?.id || services[0]?.id || 1, serviceIds: [stylistSvcs[0]?.id || services[0]?.id || 1], note:"", isNew:false, time: time || "", repeat: "none", repeatCount: 4, mode: "booking", blockDur: 60, blockReason: "" });
   }
   function lookupQuickClient(phone) {
     const c = clients.find(cl => cl.phone === phone);
-    if (c) setQuickForm(f => ({...f, clientName: c.name, isNew: false}));
+    if (c) setQuickForm(f => ({...f, clientName: c.name, clientEmail: c.email || f.clientEmail || "", isNew: false}));
     else if (phone.length >= 6) setQuickForm(f => ({...f, isNew: true}));
   }
   function saveQuickBooking() {
@@ -1345,8 +1345,14 @@ function App() {
     const stepDays = repeat === "weekly" ? 7 : repeat === "biweekly" ? 14 : repeat === "monthly" ? 28 : 0;
     const count = repeat === "none" ? 1 : Math.max(1, Math.min(52, +quickForm.repeatCount || 1));
 
+    const qEmail = (quickForm.clientEmail || "").trim();
+    const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(qEmail);
+    if (qEmail && !emailOk) { showToast("Az email-cím formátuma nem jó.", "error"); return; }
     if (quickForm.isNew || !clients.find(c => c.phone === quickForm.clientPhone)) {
-      setClients(prev => [...prev, { id: Date.now()+"c", name: quickForm.clientName, phone: quickForm.clientPhone, email: "", since: formatDate(today), points: 0, internalNotes: "", noShowCount: 0 }]);
+      setClients(prev => [...prev, { id: Date.now()+"c", name: quickForm.clientName, phone: quickForm.clientPhone, email: emailOk ? qEmail : "", since: formatDate(today), points: 0, internalNotes: "", noShowCount: 0 }]);
+    } else if (emailOk) {
+      // meglévő vendég: ha eddig nem volt email-címe (vagy más volt), frissítjük a kartonján
+      setClients(prev => prev.map(c => c.phone === quickForm.clientPhone && c.email !== qEmail ? { ...c, email: qEmail } : c));
     }
 
     const baseDate = parseDate(quickBooking.date);
@@ -1365,6 +1371,7 @@ function App() {
         date: dateStr, time: quickForm.time,
         price: totalPrice, duration: totalDuration,
         status: "confirmed", paymentMethod: null, note: quickForm.note,
+        ...(emailOk ? { clientEmail: qEmail } : {}),
       });
     }
     if (newBookings.length === 0) {
@@ -1372,6 +1379,16 @@ function App() {
     }
     setBookings(prev => [...prev, ...newBookings]);
     setQuickBooking(null);
+    // Visszaigazoló levél (ha kérték és van email): pár másodperc múlva, amikor a foglalás már az adatbázisban van.
+    // Ismétlődő foglalásnál csak az elsőről megy levél.
+    if (emailOk && quickForm.sendConfirm !== false && sb && salonId) {
+      const firstId = String(newBookings[0].id);
+      setTimeout(() => {
+        sb.functions.invoke("booking-mail", { body: { salon: salonId, bookingId: firstId } })
+          .then(r => { if (r.error) showToast("A visszaigazoló levél nem ment ki", "error"); else showToast("Visszaigazoló levél elküldve"); })
+          .catch(() => showToast("A visszaigazoló levél nem ment ki", "error"));
+      }, 4000);
+    }
     if (count > 1) {
       showToast(`${newBookings.length} foglalás hozzáadva${skipped > 0 ? ` (${skipped} kihagyva)` : ""}`);
     } else {
@@ -4037,7 +4054,7 @@ function App() {
                 <div style={{marginBottom:"10px", border:`1px solid ${C.border}`, borderRadius:"8px", overflow:"hidden", background:C.surfaceAlt}}>
                   <div style={{fontSize:"10px", color:C.sub, padding:"6px 10px", borderBottom:`1px solid ${C.border}`}}>👥 Meglévő vendég — kattints a kitöltéshez</div>
                   {matches.map(c => (
-                    <button key={c.id} onClick={() => { setQuickForm(f => ({...f, clientName: c.name, clientPhone: c.phone, isNew: false})); setClientDropdown(false); }}
+                    <button key={c.id} onClick={() => { setQuickForm(f => ({...f, clientName: c.name, clientPhone: c.phone, clientEmail: c.email || "", isNew: false})); setClientDropdown(false); }}
                       style={{display:"flex", justifyContent:"space-between", alignItems:"center", width:"100%", padding:"9px 10px", background:"transparent", border:"none", borderTop:`1px solid ${C.border}`, color:C.text, cursor:"pointer", textAlign:"left"}}>
                       <span style={{fontSize:"13px", fontWeight:"600"}}>{c.name}</span>
                       <span style={{fontSize:"11px", color:C.sub}}>{c.phone}</span>
@@ -4050,6 +4067,17 @@ function App() {
             <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Név</div>
               <input style={S.input} value={quickForm.clientName} onChange={e => { setQuickForm({...quickForm, clientName: e.target.value}); setClientDropdown(true); }} />
+            </div>
+
+            <div style={{marginBottom:"10px"}}>
+              <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Email <span style={{color:C.muted}}>(nem kötelező — visszaigazolás és emlékeztető)</span></div>
+              <input type="email" style={S.input} placeholder="vendeg@pelda.hu" value={quickForm.clientEmail || ""} onChange={e => setQuickForm({...quickForm, clientEmail: e.target.value})} />
+              {(quickForm.clientEmail || "").trim() && (
+                <label style={{display:"flex", alignItems:"center", gap:"8px", fontSize:"12px", marginTop:"8px", cursor:"pointer"}}>
+                  <input type="checkbox" checked={quickForm.sendConfirm !== false} onChange={e => setQuickForm({...quickForm, sendConfirm: e.target.checked})} />
+                  Visszaigazoló levél küldése most
+                </label>
+              )}
             </div>
 
             <div style={{marginBottom:"12px"}}>
