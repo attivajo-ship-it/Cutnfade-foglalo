@@ -808,6 +808,12 @@ function App() {
     return h * 60 + m;
   }
 
+  // Két foglalás átfed-e (percre pontosan — nem csak 15 perces rácson)
+  function rangesOverlap(timeA, durA, timeB, durB) {
+    const a = timeToMinutes(timeA), b = timeToMinutes(timeB);
+    return a < b + durB && b < a + durA;
+  }
+
   // Egy foglalás minden 15 perces slotot lefoglal amibe belelóg
   function getBookingSlots(time, duration) {
     const start = timeToMinutes(time);
@@ -846,15 +852,12 @@ function App() {
     }
 
     // Megnézzük, hogy az ÚJ foglalás bármelyik slotja ütközik-e meglévővel
-    const newSlots = getBookingSlots(time, durationMinutes);
-
     // Munkatársnak a teljes foglaláslista, vendégnek csak a foglalt sávok (busy)
     const occupied = staffMode ? bookings : busy;
     return !occupied.some(b => {
       if (excludeBookingId && b.id === excludeBookingId) return false;
       if (b.date !== dateStr || b.stylistId !== stylistId) return false;
-      const existingSlots = getBookingSlots(b.time, b.duration || 15);
-      return newSlots.some(s => existingSlots.includes(s));
+      return rangesOverlap(time, durationMinutes, b.time, b.duration || 15);
     });
   }
 
@@ -1033,12 +1036,10 @@ function App() {
     if (!stylist || !svc) { showToast("Hiányzó adat!", "error"); return; }
 
     // Ütközés-ellenőrzés (a saját magát kihagyva)
-    const newSlots = getBookingSlots(eb.time, svc.duration);
-    const conflict = bookings.some(b => {
+        const conflict = bookings.some(b => {
       if (b.id === eb.id) return false;
       if (b.date !== eb.date || b.stylistId !== eb.stylistId) return false;
-      const existingSlots = getBookingSlots(b.time, b.duration || 30);
-      return newSlots.some(s => existingSlots.includes(s));
+      return rangesOverlap(eb.time, svc.duration, b.time, b.duration || 30);
     });
     if (conflict) { showToast("Ütközik egy másik foglalással!", "error"); return; }
 
@@ -1100,18 +1101,22 @@ function App() {
     setDeleteConfirm(false); showToast("Előzmények törölve");
   }
 
-  function onDragStart(e, booking) { setDragging(booking); e.dataTransfer.effectAllowed = "move"; }
+  const dragOffsetRef = React.useRef(0);
+  function onDragStart(e, booking) {
+    // Hol fogták meg a blokkot (px a teteje alatt) — ennyivel kell feljebb tenni ejtéskor,
+    // különben a blokk teteje a kurzorhoz ugrik és a foglalás lejjebb csúszik.
+    try { dragOffsetRef.current = e.clientY - e.currentTarget.getBoundingClientRect().top; } catch { dragOffsetRef.current = 0; }
+    setDragging(booking); e.dataTransfer.effectAllowed = "move";
+  }
   function onDrop(e, dateStr, time, stylistId) {
     e.preventDefault();
     setDragPreview(null);
     if (!dragging) return;
     // Ellenőrizzük a foglaltságot a foglalás teljes hosszára
-    const newSlots = getBookingSlots(time, dragging.duration || 30);
-    const conflict = bookings.some(b => {
+        const conflict = bookings.some(b => {
       if (b.id === dragging.id) return false;
       if (b.date !== dateStr || b.stylistId !== stylistId) return false;
-      const existingSlots = getBookingSlots(b.time, b.duration || 30);
-      return newSlots.some(s => existingSlots.includes(s));
+      return rangesOverlap(time, dragging.duration || 30, b.time, b.duration || 30);
     });
     const stylist = stylists.find(s => s.id === stylistId);
     // ADMIN/FODRÁSZ: dupla foglalás engedélyezett (rácsúsztatás meglévő foglalásra), de rákérdezünk.
@@ -2323,9 +2328,7 @@ function App() {
                                     const conflict = bookings.some(b => {
                                       if (b.id === movingBooking.id) return false;
                                       if (b.date !== adminDate || b.stylistId !== s.id) return false;
-                                      const newSlots = getBookingSlots(time, movingBooking.duration || 30);
-                                      const existingSlots = getBookingSlots(b.time, b.duration || 30);
-                                      return newSlots.some(slot => existingSlots.includes(slot));
+                                      return rangesOverlap(time, movingBooking.duration || 30, b.time, b.duration || 30);
                                     });
                                     if (conflict) { showToast("Foglalt!", "error"); return; }
                                     if (settings.confirmMoves) {
@@ -2344,7 +2347,7 @@ function App() {
                                   e.preventDefault();
                                   if (!dragging) return;
                                   const rect = e.currentTarget.getBoundingClientRect();
-                                  const y = e.clientY - rect.top;
+                                  const y = e.clientY - rect.top - dragOffsetRef.current;
                                   const slotIndex = Math.round(y / 14);
                                   const totalMin = Math.max(0, slotIndex * 15);
                                   const startMin = timeToMinutes(CAL_START) + totalMin;
@@ -2358,7 +2361,7 @@ function App() {
                                   setDragPreview(null);
                                   if (!dragging) return;
                                   const rect = e.currentTarget.getBoundingClientRect();
-                                  const y = e.clientY - rect.top;
+                                  const y = e.clientY - rect.top - dragOffsetRef.current;
                                   const slotIndex = Math.round(y / 14);
                                   const totalMin = Math.max(0, slotIndex * 15);
                                   const startMin = timeToMinutes(CAL_START) + totalMin;
@@ -2453,7 +2456,7 @@ function App() {
                                     e.stopPropagation();
                                     // a blokk tetejére dobva: a blokk kezdő idejére tesszük
                                     const rect = e.currentTarget.parentElement.getBoundingClientRect();
-                                    const y = e.clientY - rect.top;
+                                    const y = e.clientY - rect.top - dragOffsetRef.current;
                                     const slotIndex = Math.round(y / 14);
                                     const totalMin = Math.max(0, slotIndex * 15);
                                     const startMin = timeToMinutes(CAL_START) + totalMin;
@@ -2467,6 +2470,7 @@ function App() {
                                       if (navigator.vibrate) navigator.vibrate(30);
                                     }, 350);
                                     e.currentTarget._lpTimer = timer;
+                                    try { dragOffsetRef.current = e.touches[0].clientY - e.currentTarget.getBoundingClientRect().top; } catch { dragOffsetRef.current = 0; }
                                   }}
                                   onTouchMove={(e) => {
                                     if (e.currentTarget._lpTimer && !touchDragging) {
@@ -2483,7 +2487,7 @@ function App() {
                                     const grid = col?.querySelector("[data-grid]") || col;
                                     if (grid) {
                                       const rect = grid.getBoundingClientRect();
-                                      const y = touch.clientY - rect.top;
+                                      const y = touch.clientY - rect.top - dragOffsetRef.current;
                                       const slotIndex = Math.max(0, Math.round(y / 14));
                                       const totalMin = slotIndex * 15;
                                       const startMin = timeToMinutes(CAL_START) + totalMin;
@@ -2498,9 +2502,7 @@ function App() {
                                       const conflict = bookings.some(bk => {
                                         if (bk.id === touchDragging.id) return false;
                                         if (bk.date !== adminDate || bk.stylistId !== target.stylistId) return false;
-                                        const newSlots = getBookingSlots(target.time, touchDragging.duration || 30);
-                                        const existingSlots = getBookingSlots(bk.time, bk.duration || 30);
-                                        return newSlots.some(slot => existingSlots.includes(slot));
+                                        return rangesOverlap(target.time, touchDragging.duration || 30, bk.time, bk.duration || 30);
                                       });
                                       const targetStylist = stylists.find(st => st.id === target.stylistId);
                                       if (conflict) {
