@@ -2884,12 +2884,15 @@ function App() {
                                     opacity: (dragging && dragging.id === b.id) ? 0.45 : touchDragging?.id === b.id ? 0.7 : 1,
                                     ...(C.isLight ? {
                                       // Világos téma: fehér kártya, bal oldalon a barber színe; a státuszt a háttér + jel mutatja
-                                      background: touchDragging?.id === b.id ? "#e3f4ec" : b.status==="completed" ? "#eaf6ee" : b.status==="noshow" ? "#fdecea" : "#ffffff",
+                                      // halvány háttér a barber színéből, a bal csík ugyanennek sötétebb változata
+                                      background: touchDragging?.id === b.id ? "#e3f4ec"
+                                        : b.status==="noshow" ? "#fdecea"
+                                        : `color-mix(in srgb, ${s.color || "#cfe3da"} 55%, #ffffff)`,
                                       color: C.text,
                                       borderRadius:"8px",
                                       padding:"4px 7px 4px 9px",
-                                      border: `1px solid ${touchDragging?.id === b.id ? C.accent : C.border}`,
-                                      borderLeft: `5px solid ${b.status==="noshow" ? C.danger : (s.color || C.accent)}`,
+                                      border: `1px solid ${touchDragging?.id === b.id ? C.accent : `color-mix(in srgb, ${s.color || "#cfe3da"} 70%, #000000 8%)`}`,
+                                      borderLeft: `5px solid ${b.status==="noshow" ? C.danger : `color-mix(in srgb, ${s.color || C.accent} 60%, #000000)`}`,
                                       boxShadow: "0 1px 2px rgba(20,26,23,0.06)",
                                     } : {
                                       background: touchDragging?.id === b.id ? C.accent : b.status==="completed" ? "#7cb87c" : b.status==="noshow" ? "#dc4a3d" : "#f4a89f",
