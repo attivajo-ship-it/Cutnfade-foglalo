@@ -2489,12 +2489,12 @@ function App() {
 
                 {calView === "day" && (
                 <div className="scroll-x" style={{maxHeight:"65vh", overflowY:"auto", overflowX:"auto", WebkitOverflowScrolling:"touch"}}>
-                  <div style={{display:"flex", gap:"4px", minWidth: `${stylists.length * 140 + 60}px`}}>
+                  <div style={{display:"flex", gap: C.isLight ? "10px" : "4px", minWidth: `${stylists.length * 140 + 60}px`}}>
                     {/* Idő oszlop */}
                     <div style={{width:"50px", flexShrink:0, position:"relative"}}>
                       <div style={{height:"60px", position:"sticky", top:0, zIndex:6, background:C.surface}}></div>
                       {CAL_HOURS.map(h => (
-                        <div key={h} style={{height:"56px", fontSize:"11px", color:C.sub, fontWeight:"700", textAlign:"right", paddingRight:"6px", paddingTop:"2px", borderTop:`1px solid ${C.border}`}}>{h}</div>
+                        <div key={h} style={{height:"56px", fontSize:"11px", color: C.isLight ? C.muted : C.sub, fontWeight: C.isLight ? "600" : "700", textAlign:"right", paddingRight:"8px", paddingTop: C.isLight ? "0px" : "2px", marginTop: C.isLight ? "-6px" : 0, borderTop: C.isLight ? "none" : `1px solid ${C.border}`}}>{h}</div>
                       ))}
                       {/* MOST IDŐBÉLYEG - csak mai napon */}
                       {adminDate === todayStr && (() => {
@@ -2534,11 +2534,18 @@ function App() {
                       return (
                         <div key={s.id} data-col-stylist={s.id} style={{flex:1, minWidth:"140px"}}>
                           {/* Fejléc */}
-                          <div style={{textAlign:"center", padding:"12px 6px", background: working ? "#ffffff" : (C.isLight ? C.surfaceAlt : "#2a2a2a"), borderRadius:"4px 4px 0 0", opacity: working ? 1 : 0.7, minHeight:"64px", display:"flex", flexDirection:"column", justifyContent:"center", position:"sticky", top:0, zIndex:6, borderBottom:`2px solid ${working ? s.color : C.border}`}}>
+                          <div style={{textAlign:"center", padding: C.isLight ? "8px 34px 10px 6px" : "12px 6px", background: C.isLight ? C.surface : (working ? "#ffffff" : "#2a2a2a"), borderRadius:"4px 4px 0 0", opacity: working ? 1 : 0.7, minHeight:"64px", display:"flex", flexDirection:"column", justifyContent:"center", position:"sticky", top:0, zIndex:6, borderBottom: C.isLight ? "none" : `2px solid ${working ? s.color : C.border}`}}>
+                            {C.isLight ? (
+                              <div style={{display:"flex", alignItems:"center", justifyContent:"center", gap:"8px", minWidth:0}}>
+                                <span style={{width:"30px", height:"30px", flexShrink:0, borderRadius:"50%", background:s.color, color:"#1a1a1a", display:"inline-flex", alignItems:"center", justifyContent:"center", fontSize:"11px", fontWeight:"800"}}>{s.initials}</span>
+                                <span style={{fontSize:"13px", fontWeight:"700", color:C.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{s.name}</span>
+                              </div>
+                            ) : (
                             <div style={{fontSize:"13px", fontWeight:"800", color:"#0a0a0a"}}>
                               <span style={{display:"inline-block", padding:"2px 8px", borderRadius:"10px", background:s.color, marginRight:"6px", color:"#0a0a0a"}}>{s.initials}</span>
                               {s.name}
                             </div>
+                            )}
                             {!working && <div style={{fontSize:"10px", color:"#fff", background:"#dc4a3d", padding:"2px 8px", borderRadius:"10px", display:"inline-block", marginTop:"4px", fontWeight:"700"}}>NEM DOLGOZIK</div>}
                             {working && parseDate(adminDate) >= today && (
                               <button
@@ -2550,7 +2557,7 @@ function App() {
                           </div>
 
                           {/* Idő-rács (egy folytonos vászon) */}
-                          <div data-grid style={{position:"relative", background: C.isLight ? "#eef1ef" : C.borderLight, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, height: `${CAL_ROWS * 56}px`}}>
+                          <div data-grid style={{position:"relative", background: C.isLight ? "#f0f3f1" : C.borderLight, ...(C.isLight ? { borderRadius:"12px", overflow:"hidden" } : { borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}` }), height: `${CAL_ROWS * 56}px`}}>
 
                             {/* MUNKAIDŐ SÁVA - csak akkor látszik amikor dolgozik */}
                             {working && (() => {
@@ -2601,10 +2608,12 @@ function App() {
 
                             {/* Óránkénti vonalak */}
                             {CAL_HOURS.map((h, idx) => (
-                              <div key={h} style={{position:"absolute", left:0, right:0, top:`${idx*56}px`, height:"56px", borderTop:`1px solid ${C.border}88`, pointerEvents:"none"}}>
-                                <div style={{position:"absolute", top:"14px", left:0, right:0, borderTop:`1px dashed ${C.border}66`}}></div>
-                                <div style={{position:"absolute", top:"28px", left:0, right:0, borderTop:`1px dashed ${C.border}66`}}></div>
-                                <div style={{position:"absolute", top:"42px", left:0, right:0, borderTop:`1px dashed ${C.border}66`}}></div>
+                              <div key={h} style={{position:"absolute", left:0, right:0, top:`${idx*56}px`, height:"56px", borderTop: C.isLight ? (idx === 0 ? "none" : "1px solid rgba(20,26,23,0.06)") : `1px solid ${C.border}88`, pointerEvents:"none"}}>
+                                {!C.isLight && <>
+                                  <div style={{position:"absolute", top:"14px", left:0, right:0, borderTop:`1px dashed ${C.border}66`}}></div>
+                                  <div style={{position:"absolute", top:"28px", left:0, right:0, borderTop:`1px dashed ${C.border}66`}}></div>
+                                  <div style={{position:"absolute", top:"42px", left:0, right:0, borderTop:`1px dashed ${C.border}66`}}></div>
+                                </>}
                               </div>
                             ))}
 
@@ -2822,9 +2831,9 @@ function App() {
                                   style={{
                                     position:"absolute",
                                     top:`${topPx}px`,
-                                    left:"2px",
-                                    right:"2px",
-                                    height:`${heightPx - 2}px`,
+                                    left: C.isLight ? "4px" : "2px",
+                                    right: C.isLight ? "4px" : "2px",
+                                    height:`${heightPx - (C.isLight ? 3 : 2)}px`,
                                     // Húzás közben "átlátszó" az egérnek: így a rács kapja az ejtést akkor is,
                                     // ha a kurzor egy másik foglalás vagy a saját régi helye fölött van.
                                     pointerEvents: dragging ? "none" : undefined,
@@ -2833,8 +2842,8 @@ function App() {
                                       // Világos téma: fehér kártya, bal oldalon a barber színe; a státuszt a háttér + jel mutatja
                                       background: touchDragging?.id === b.id ? "#e3f4ec" : b.status==="completed" ? "#eaf6ee" : b.status==="noshow" ? "#fdecea" : "#ffffff",
                                       color: C.text,
-                                      borderRadius:"6px",
-                                      padding:"3px 6px 3px 8px",
+                                      borderRadius:"8px",
+                                      padding:"4px 7px 4px 9px",
                                       border: `1px solid ${touchDragging?.id === b.id ? C.accent : C.border}`,
                                       borderLeft: `5px solid ${b.status==="noshow" ? C.danger : (s.color || C.accent)}`,
                                       boxShadow: "0 1px 2px rgba(20,26,23,0.06)",
@@ -2852,12 +2861,12 @@ function App() {
                                     zIndex: touchDragging?.id === b.id ? 5 : 2,
                                     touchAction: "none",
                                   }}>
-                                  <div style={{fontSize:"10px", fontWeight:"700", display:"flex", justifyContent:"space-between", gap:"4px"}}>
+                                  <div style={{fontSize: C.isLight ? "11px" : "10px", fontWeight:"700", color: C.isLight ? C.sub : undefined, display:"flex", justifyContent:"space-between", gap:"4px"}}>
                                     <span>{b.time} – {endTime}</span>
                                     {C.isLight && b.status === "completed" && <span style={{color:C.success}} title="Teljesítve">✓</span>}
                                     {C.isLight && b.status === "noshow" && <span style={{color:C.danger}} title="Nem jelent meg">✗</span>}
                                   </div>
-                                  <div style={{fontSize: C.isLight ? "11px" : "10px", fontWeight: C.isLight ? "700" : "600", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{b.clientName}</div>
+                                  <div style={{fontSize: C.isLight ? "12.5px" : "10px", fontWeight: C.isLight ? "700" : "600", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{b.clientName}</div>
                                   <div style={{fontSize:"9px", opacity:0.8, fontWeight:"500", color: C.isLight ? C.sub : undefined, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{b.service}</div>
                                 </div>
                               );
