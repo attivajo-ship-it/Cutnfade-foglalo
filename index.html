@@ -33,14 +33,7 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- JSX classic runtime: a globális React.createElement-et használja, nem importál "react/jsx-runtime"-ot -->
-  <script>
-    Babel.registerPreset('react-classic', {
-      presets: [[Babel.availablePresets.react, { runtime: 'classic' }]]
-    });
-  </script>
-
-  <script type="text/babel" data-presets="react-classic" data-type="module">
+  <script type="text/babel" data-presets="react" data-type="module">
 
 // === FORDÍTÁSOK (vendég oldal) ===
 const TRANSLATIONS = {
@@ -206,7 +199,7 @@ function App() {
     instagram: "https://www.instagram.com/cutnfade.nyiregyhaza/",
     facebook: "https://www.facebook.com/cutnfade.nyiregyhaza/",
     adminEmail: "admin@cutnfade.hu",
-    adminPassword: "admin123",
+    adminPassword: "",
     pin: "1234", // backward compat
     notifyEnabled: true,
     reminderHours: 24,
@@ -221,11 +214,11 @@ function App() {
   }));
 
   const [stylists, setStylists] = React.useState(() => load("cnf_stylists", [
-    { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
-    { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
-    { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
-    { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
-    { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
+    { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
   ]));
 
   const [services, setServices] = React.useState(() => load("cnf_services", [
@@ -291,6 +284,7 @@ function App() {
   const [touchDragging, setTouchDragging] = React.useState(null);
   const [quickBooking, setQuickBooking] = React.useState(null);
   const [quickForm, setQuickForm] = React.useState({ clientPhone:"", clientName:"", serviceId:1, note:"", isNew:false, time:"" });
+  const [clientDropdown, setClientDropdown] = React.useState(false);
   const [deleteConfirm, setDeleteConfirm] = React.useState(false);
   const [showAddClient, setShowAddClient] = React.useState(false);
   const [newClient, setNewClient] = React.useState({ name:"", phone:"", email:"", internalNotes:"" });
@@ -977,13 +971,11 @@ function App() {
       const existingSlots = getBookingSlots(b.time, b.duration || 30);
       return newSlots.some(s => existingSlots.includes(s));
     });
-    const stylist = stylists.find(s => s.id === stylistId);
-    // ADMIN/FODRÁSZ: dupla foglalás engedélyezett (rácsúsztatás meglévő foglalásra), de rákérdezünk.
-    // FONTOS: ez a függvény CSAK az admin naptárban fut. Az online (vendég) foglalásnál
-    // a vendég csak a SZABAD sávokból választhat, ezért vendég nem tud foglaltra foglalni.
     if (conflict) {
-      if (!confirm(`⚠️ Erre az idősávra már van foglalás.\nRáteszed mégis (dupla foglalás)?\n\n${dragging.clientName}\n${dateStr} ${time} · ${stylist?.name || ""}`)) { setDragging(null); return; }
-    } else if (settings.confirmMoves) {
+      showToast("Foglalt!", "error"); setDragging(null); return;
+    }
+    const stylist = stylists.find(s => s.id === stylistId);
+    if (settings.confirmMoves) {
       if (!confirm(`Áthelyezed ide?\n\n${dragging.clientName}\n${dateStr} ${time} · ${stylist?.name}`)) { setDragging(null); return; }
     }
     setBookings(prev => prev.map(b => b.id === dragging.id ? {...b, date: dateStr, time, stylistId, stylist: stylist?.name || b.stylist} : b));
@@ -1082,7 +1074,7 @@ function App() {
     const initials = newStylist.initials || newStylist.name.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase();
     const colors = ["#e8d5d5","#b8dfe0","#c8e6c8","#d8d8d8","#e8c8e0","#f0e0c0","#d0c8e8"];
     const color = colors[stylists.length % colors.length];
-    setStylists(prev => [...prev, { id: Date.now(), name: newStylist.name, title: "Barber", initials, color, email: newStylist.email || "", password: newStylist.password || "barber123", hours: EMPTY_HOURS, vacation: [], bookingHorizonDays: 30 }]);
+    setStylists(prev => [...prev, { id: Date.now(), name: newStylist.name, title: "Barber", initials, color, email: newStylist.email || "", password: newStylist.password || "", hours: EMPTY_HOURS, vacation: [], bookingHorizonDays: 30 }]);
     setNewStylist({ name: "", initials: "", email: "", password: "" }); setShowAddStylist(false); showToast("Hozzáadva — a barber a 'Saját adatok' fülön állítsa be a munkaidejét");
   }
   function deleteStylist(id) { if (!confirm("Biztosan törlöd?")) return; setStylists(prev => prev.filter(s => s.id !== id)); showToast("Törölve"); }
@@ -3041,11 +3033,11 @@ function App() {
                   <button style={{...S.btnSec, width:"100%"}} onClick={() => {
                     if (!confirm("Visszaállítod a barbereket az alapértelmezett adatokra?")) return;
                     setStylists([
-                      { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
-                      { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
-                      { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
-                      { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
-                      { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade.hu", password: "barber123", hours: CNF_HOURS, vacation: [] },
+                      { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
                     ]);
                     showToast("Barberek visszaállítva");
                   }}>🔄 Barberek visszaállítása</button>
@@ -3499,14 +3491,38 @@ function App() {
 
             <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Vendég telefonszáma</div>
-              <input style={S.input} placeholder="+36..." value={quickForm.clientPhone} onChange={e => { setQuickForm({...quickForm, clientPhone: e.target.value}); lookupQuickClient(e.target.value); }} />
+              <input style={S.input} placeholder="+36..." value={quickForm.clientPhone} onChange={e => { setQuickForm({...quickForm, clientPhone: e.target.value}); lookupQuickClient(e.target.value); setClientDropdown(true); }} />
               {quickForm.clientPhone && !quickForm.isNew && quickForm.clientName && <div style={{fontSize:"10px", color:C.success, marginTop:"3px"}}>✓ Meglévő: {quickForm.clientName}</div>}
               {quickForm.isNew && <div style={{fontSize:"10px", color:C.info, marginTop:"3px"}}>ℹ Új vendég</div>}
             </div>
 
+            {/* Felbukkanó vendéglista — gépelés közben (név vagy telefon) */}
+            {clientDropdown && (() => {
+              const qName = (quickForm.clientName || "").toLowerCase().trim();
+              const qPhone = (quickForm.clientPhone || "").replace(/\s/g, "");
+              const matches = clients.filter(c => {
+                const nameHit = qName.length >= 2 && (c.name || "").toLowerCase().includes(qName);
+                const phoneHit = qPhone.length >= 3 && (c.phone || "").replace(/\s/g, "").includes(qPhone);
+                return nameHit || phoneHit;
+              }).slice(0, 6);
+              if (matches.length === 0) return null;
+              return (
+                <div style={{marginBottom:"10px", border:`1px solid ${C.border}`, borderRadius:"8px", overflow:"hidden", background:C.surfaceAlt}}>
+                  <div style={{fontSize:"10px", color:C.sub, padding:"6px 10px", borderBottom:`1px solid ${C.border}`}}>👥 Meglévő vendég — kattints a kitöltéshez</div>
+                  {matches.map(c => (
+                    <button key={c.id} onClick={() => { setQuickForm(f => ({...f, clientName: c.name, clientPhone: c.phone, isNew: false})); setClientDropdown(false); }}
+                      style={{display:"flex", justifyContent:"space-between", alignItems:"center", width:"100%", padding:"9px 10px", background:"transparent", border:"none", borderTop:`1px solid ${C.border}`, color:C.text, cursor:"pointer", textAlign:"left"}}>
+                      <span style={{fontSize:"13px", fontWeight:"600"}}>{c.name}</span>
+                      <span style={{fontSize:"11px", color:C.sub}}>{c.phone}</span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+
             <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Név</div>
-              <input style={S.input} value={quickForm.clientName} onChange={e => setQuickForm({...quickForm, clientName: e.target.value})} />
+              <input style={S.input} value={quickForm.clientName} onChange={e => { setQuickForm({...quickForm, clientName: e.target.value}); setClientDropdown(true); }} />
             </div>
 
             <div style={{marginBottom:"12px"}}>
