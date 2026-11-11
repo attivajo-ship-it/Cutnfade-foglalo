@@ -214,7 +214,7 @@ function App() {
     address: "Zrínyi Ilona u. 8-10., 4400 Nyíregyháza",
     instagram: "https://www.instagram.com/cutnfade.nyiregyhaza/",
     facebook: "https://www.facebook.com/cutnfade.nyiregyhaza/",
-    adminEmail: "admin@cutnfade.hu",
+    adminEmail: "admin@cutnfade-nyiregyhaza.hu",
     adminPassword: "",
     pin: "1234", // backward compat
     notifyEnabled: true,
@@ -230,11 +230,11 @@ function App() {
   }));
 
   const [stylists, setStylists] = React.useState(() => load("cnf_stylists", [
-    { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
-    { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
-    { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
-    { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
-    { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+    { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
   ]));
 
   const [services, setServices] = React.useState(() => load("cnf_services", [
@@ -313,6 +313,7 @@ function App() {
     setBookings([]); setClients([]);
     bookingsLoadedRef.current = false; clientsLoadedRef.current = false;
     seenBookingIdsRef.current = null; setBookingAlerts([]);
+    syncMetaRef.current = { bookings: new Map(), clients: new Map() };
     try { ["cnf_bookings", "cnf_clients"].forEach(k => localStorage.removeItem(k)); } catch {}
   }, [sessionChecked, staffMode]);
 
@@ -387,10 +388,70 @@ function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // ===== FOGLALÁS SZINKRON (3b lépés) =====
-  // A polling épp tölt? (ilyenkor ne küldjük vissza amit letöltöttünk)
-  const syncingRef = React.useRef(false);
-  const prevExtIdsRef = React.useRef(null);
+  // ===== FOGLALÁS / VENDÉG SZINKRON — csak a változások (AUDIT 2026-11-11 #3, #4) =====
+  // Régen minden változásnál a TELJES lista ment fel, így két eszköz felülírta egymás munkáját,
+  // és a letöltés max. 1000 sort hozott. Most:
+  //  - syncMetaRef[tábla]: id -> a sor utoljára az adatbázissal egyeztetett állapota (JSON)
+  //  - feltöltés: csak ami ettől eltér (változott/új), törlés: ami eltűnt helyben
+  //  - letöltés: lapozva (1000-esével); a még fel nem küldött helyi változás megmarad
+  const syncMetaRef = React.useRef({ bookings: new Map(), clients: new Map() });
+  // helyben törölt, de az adatbázisban még nem megerősített sorok (ne "támadjanak fel" letöltéskor)
+  const pendingDeleteRef = React.useRef({ bookings: new Set(), clients: new Set() });
+  const rowKey = x => String(x.id);
+  const rowSig = x => JSON.stringify(x);
+
+  async function fetchAllRows(table, columns) {
+    const out = [], step = 1000;
+    for (let from = 0; ; from += step) {
+      const { data, error } = await sb.from(table).select(columns).eq("salon_id", salonId)
+        .order("id", { ascending: true }).range(from, from + step - 1);
+      if (error) throw error;
+      out.push(...(data || []));
+      if (!data || data.length < step) break;
+    }
+    return out;
+  }
+
+  async function pushChanges(table, list, toRow) {
+    const meta = syncMetaRef.current[table];
+    const changed = list.filter(x => x && meta.get(rowKey(x)) !== rowSig(x));
+    const current = new Set(list.map(rowKey));
+    const removed = [...meta.keys()].filter(id => !current.has(id));
+    for (let i = 0; i < changed.length; i += 500) {
+      const { error } = await sb.from(table).upsert(changed.slice(i, i + 500).map(toRow), { onConflict: "salon_id,ext_id" });
+      if (error) throw error;
+    }
+    const pend = pendingDeleteRef.current[table];
+    removed.forEach(id => pend.add(id));
+    try {
+      for (let i = 0; i < removed.length; i += 200) {
+        const { error } = await sb.from(table).delete().eq("salon_id", salonId).in("ext_id", removed.slice(i, i + 200));
+        if (error) throw error;
+      }
+    } finally {
+      removed.forEach(id => pend.delete(id));
+    }
+    const m = syncMetaRef.current[table];
+    changed.forEach(x => m.set(rowKey(x), rowSig(x)));
+    removed.forEach(id => m.delete(id));
+  }
+
+  // Letöltött lista + helyi, még fel nem küldött változások. Visszaadja az új állapotot
+  // előállító függvényt (setState-hez) és az új "egyeztetett" térképet.
+  function mergeDownloaded(table, downloaded) {
+    const oldMeta = syncMetaRef.current[table];
+    const pend = pendingDeleteRef.current[table];
+    downloaded = downloaded.filter(x => !pend.has(rowKey(x)));
+    const newMeta = new Map(downloaded.map(x => [rowKey(x), rowSig(x)]));
+    syncMetaRef.current[table] = newMeta;
+    return (local) => {
+      const byId = new Map(downloaded.map(x => [rowKey(x), x]));
+      // ami helyben eltér a legutóbb egyeztetettől = még nem ment fel -> a helyi nyer, feltöltjük
+      (local || []).forEach(x => { if (x && oldMeta.size > 0 && oldMeta.get(rowKey(x)) !== rowSig(x)) byId.set(rowKey(x), x); });
+      return [...byId.values()];
+    };
+  }
+
   const bookingsRef = React.useRef(bookings);
   React.useEffect(() => { bookingsRef.current = bookings; }, [bookings]);
 
@@ -459,25 +520,10 @@ function App() {
   async function syncBookingsUp(list) {
     if (!sb || !salonId || !staffMode || !bookingsLoadedRef.current) return;
     try {
-      // 1) Upsert (beszúr vagy frissít) minden foglalást
-      if (list.length > 0) {
-        const rows = list.map(bookingToRow);
-        const { error } = await sb.from("bookings").upsert(rows, { onConflict: "salon_id,ext_id" });
-        if (error) throw error;
-      }
-      // 2) Törlés: ami eltűnt a helyi listából, töröljük a DB-ből is
-      const prev = prevExtIdsRef.current;
-      const currentIds = new Set(list.map(b => String(b.id)));
-      if (prev) {
-        const removed = [...prev].filter(id => !currentIds.has(id));
-        if (removed.length > 0) {
-          const { error } = await sb.from("bookings").delete().eq("salon_id", salonId).in("ext_id", removed);
-          if (error) throw error;
-        }
-      }
-      prevExtIdsRef.current = currentIds;
+      await pushChanges("bookings", list, bookingToRow);   // csak a változott / törölt foglalások
     } catch (err) {
       console.error("Szinkron (fel) hiba:", err);
+      showToast("⚠️ Mentési hiba — ellenőrizd a kapcsolatot", "error");
     }
   }
 
@@ -485,8 +531,7 @@ function App() {
   async function fetchBookingsDown() {
     if (!sb || !salonId || !staffMode) return;
     try {
-      const { data, error } = await sb.from("bookings").select("raw, ext_id").eq("salon_id", salonId);
-      if (error) throw error;
+      const data = await fetchAllRows("bookings", "raw, ext_id");   // lapozva, nincs 1000-es korlát
       const downloaded = (data || []).map(r => r.raw).filter(Boolean);
       // MIGRÁCIÓ: ha a DB üres, de van helyi adat -> felküldjük, nem írjuk felül
       if (downloaded.length === 0 && bookingsRef.current.length > 0 && !bookingsLoadedRef.current) {
@@ -517,18 +562,15 @@ function App() {
         if (fresh.length > 0) notifyNewBookings(fresh);
       }
       seenBookingIdsRef.current = new Set(visible.map(b => String(b.id)));
-      syncingRef.current = true; // jelezzük: ez letöltésből jön, ne küldjük vissza
-      prevExtIdsRef.current = new Set(visible.map(b => String(b.id)));
-      setBookings(visible);
+      setBookings(mergeDownloaded("bookings", visible));
     } catch (err) {
       console.error("Szinkron (le) hiba:", err);
     }
   }
 
-  // Amikor a foglalások változnak (és nem letöltésből) -> felküldjük
+  // Amikor a foglalások változnak -> a különbséget felküldjük (letöltés után nincs különbség)
   React.useEffect(() => {
     if (!sb || !salonId || !staffMode) return;
-    if (syncingRef.current) { syncingRef.current = false; return; }
     syncBookingsUp(bookings);
   }, [bookings, salonId, staffMode]);
 
@@ -561,8 +603,6 @@ function App() {
   }, [salonId, staffMode]);
 
   // ===== VENDÉGKARTON SZINKRON (3c lépés) =====
-  const clientSyncingRef = React.useRef(false);
-  const prevClientIdsRef = React.useRef(null);
   const clientsRef = React.useRef(clients);
   React.useEffect(() => { clientsRef.current = clients; }, [clients]);
 
@@ -571,40 +611,26 @@ function App() {
   async function syncClientsUp(list) {
     if (!sb || !salonId || !staffMode || !clientsLoadedRef.current) return;
     try {
-      if (list.length > 0) {
-        const rows = list.map(c => ({
-          salon_id: salonId,
-          ext_id: String(c.id),
-          name: c.name || "",
-          phone: c.phone || null,
-          email: c.email || null,
-          points: c.points || 0,
-          noshow_count: c.noShowCount || 0,
-          raw: c,
-        }));
-        const { error } = await sb.from("clients").upsert(rows, { onConflict: "salon_id,ext_id" });
-        if (error) throw error;
-      }
-      const prev = prevClientIdsRef.current;
-      const currentIds = new Set(list.map(c => String(c.id)));
-      if (prev) {
-        const removed = [...prev].filter(id => !currentIds.has(id));
-        if (removed.length > 0) {
-          const { error } = await sb.from("clients").delete().eq("salon_id", salonId).in("ext_id", removed);
-          if (error) throw error;
-        }
-      }
-      prevClientIdsRef.current = currentIds;
+      await pushChanges("clients", list, c => ({
+        salon_id: salonId,
+        ext_id: String(c.id),
+        name: c.name || "",
+        phone: c.phone || null,
+        email: c.email || null,
+        points: c.points || 0,
+        noshow_count: c.noShowCount || 0,
+        raw: c,
+      }));
     } catch (err) {
       console.error("Vendég szinkron (fel) hiba:", err);
+      showToast("⚠️ Vendégkarton mentési hiba — ellenőrizd a kapcsolatot", "error");
     }
   }
 
   async function fetchClientsDown() {
     if (!sb || !salonId || !staffMode) return;
     try {
-      const { data, error } = await sb.from("clients").select("raw").eq("salon_id", salonId);
-      if (error) throw error;
+      const data = await fetchAllRows("clients", "raw");   // lapozva, nincs 1000-es korlát
       const downloaded = (data || []).map(r => r.raw).filter(Boolean);
       if (downloaded.length === 0 && clientsRef.current.length > 0 && !clientsLoadedRef.current) {
         clientsLoadedRef.current = true;
@@ -612,9 +638,7 @@ function App() {
         return;
       }
       clientsLoadedRef.current = true;
-      clientSyncingRef.current = true;
-      prevClientIdsRef.current = new Set(downloaded.map(c => String(c.id)));
-      setClients(downloaded);
+      setClients(mergeDownloaded("clients", downloaded));
     } catch (err) {
       console.error("Vendég szinkron (le) hiba:", err);
     }
@@ -622,7 +646,6 @@ function App() {
 
   React.useEffect(() => {
     if (!sb || !salonId || !staffMode) return;
-    if (clientSyncingRef.current) { clientSyncingRef.current = false; return; }
     syncClientsUp(clients);
   }, [clients, salonId, staffMode]);
 
@@ -968,6 +991,8 @@ function App() {
           past: "Ez az időpont már elmúlt. Válassz másikat!",
           unavailable: "Erre az időpontra nem lehet online foglalni. Válassz másikat!",
           invalid: "Ellenőrizd a megadott adatokat (név, telefon, email).",
+          limit_phone: "Ezzel a telefonszámmal már 3 közelgő foglalásod van. Továbbiakhoz hívj minket telefonon.",
+          limit_rate: "Most túl sok foglalás érkezik. Kérjük, próbáld újra pár perc múlva, vagy hívj minket.",
         }[data && data.error] || "A foglalás nem sikerült, próbáld újra.";
         showToast(msg, "error");
         if (data && (data.error === "taken" || data.error === "unavailable")) { setForm(f => ({ ...f, time: "" })); fetchBusyDown(); }
@@ -1867,6 +1892,12 @@ function App() {
               onClick={handleBook} disabled={!form.name || !form.phone || !form.email || !form.time || !form.stylist || !form.service || getClientStatus(form.phone).blocked}>
               {getClientStatus(form.phone).blocked ? T.bookingNotPossible : T.confirmBooking}
             </button>
+            {/* Adatkezelési tájékoztató (GDPR 13. cikk — AUDIT 2026-11-11 #10) */}
+            <div style={{fontSize:"11px", color:C.sub, textAlign:"center", marginTop:"8px", lineHeight:1.5}}>
+              {lang === "hu"
+                ? <>A foglalással elfogadod az <a href="https://cutnfade-nyiregyhaza.hu/#aszf" target="_blank" rel="noopener" style={{color:C.textDim}}>adatkezelési tájékoztatót</a>. Adataidat csak a foglalás kezeléséhez és a visszaigazoláshoz használjuk.</>
+                : <>By booking you accept our <a href="https://cutnfade-nyiregyhaza.hu/#aszf" target="_blank" rel="noopener" style={{color:C.textDim}}>privacy policy</a>. Your details are used only to manage your booking and send confirmation.</>}
+            </div>
 
             {/* Footer info */}
             <div style={{marginTop:"24px", padding:"20px", background: C.surface, borderRadius:"8px", border:`1px solid ${C.border}`, textAlign:"center"}}>
@@ -2759,7 +2790,7 @@ function App() {
                   <div style={{padding:"12px", background:C.accentSoft, borderRadius:"6px", marginBottom:"10px", border:`1px solid ${C.accentDark}`}}>
                     <input style={{...S.input, marginBottom:"8px"}} placeholder="Név" value={newStylist.name} onChange={e=>setNewStylist({...newStylist, name:e.target.value})} />
                     <input style={{...S.input, marginBottom:"8px"}} placeholder="Iniciálé (pl. VA)" value={newStylist.initials} onChange={e=>setNewStylist({...newStylist, initials:e.target.value.toUpperCase().slice(0,2)})} />
-                    <input type="email" style={{...S.input, marginBottom:"8px"}} placeholder="Email (pl. nev@cutnfade.hu)" value={newStylist.email || ""} onChange={e=>setNewStylist({...newStylist, email:e.target.value})} />
+                    <input type="email" style={{...S.input, marginBottom:"8px"}} placeholder="Email (pl. nev@cutnfade-nyiregyhaza.hu)" value={newStylist.email || ""} onChange={e=>setNewStylist({...newStylist, email:e.target.value})} />
                     <input type="password" style={{...S.input, marginBottom:"8px"}} placeholder="Jelszó" value={newStylist.password || ""} onChange={e=>setNewStylist({...newStylist, password:e.target.value})} />
                     <div style={{display:"flex", gap:"6px"}}>
                       <button style={S.btn} onClick={addStylist}>Hozzáadás</button>
@@ -3278,11 +3309,11 @@ function App() {
                   <button style={{...S.btnSec, width:"100%"}} onClick={() => {
                     if (!confirm("Visszaállítod a barbereket az alapértelmezett adatokra?")) return;
                     setStylists([
-                      { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
-                      { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
-                      { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
-                      { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
-                      { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
+                      { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade-nyiregyhaza.hu", password: "", hours: CNF_HOURS, vacation: [] },
                     ]);
                     showToast("Barberek visszaállítva");
                   }}>🔄 Barberek visszaállítása</button>
@@ -3872,7 +3903,7 @@ function App() {
               <div style={{fontSize:"11px", color:"#888", marginBottom:"4px"}}>📧 EMAIL ELŐNÉZET</div>
               <div style={{fontSize:"16px", fontWeight:"700", color:"#1a1a1a"}}>{selectedEmail.subject}</div>
               <div style={{fontSize:"12px", color:"#666", marginTop:"6px"}}>
-                <strong>Feladó:</strong> {settings.salonName} &lt;noreply@cutnfade.hu&gt;<br/>
+                <strong>Feladó:</strong> {settings.salonName} &lt;noreply@cutnfade-nyiregyhaza.hu&gt;<br/>
                 <strong>Címzett:</strong> {selectedEmail.to}
               </div>
             </div>
