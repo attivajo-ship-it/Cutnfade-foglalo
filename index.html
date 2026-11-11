@@ -1106,7 +1106,10 @@ function App() {
     // Hol fogták meg a blokkot (px a teteje alatt) — ennyivel kell feljebb tenni ejtéskor,
     // különben a blokk teteje a kurzorhoz ugrik és a foglalás lejjebb csúszik.
     try { dragOffsetRef.current = e.clientY - e.currentTarget.getBoundingClientRect().top; } catch { dragOffsetRef.current = 0; }
-    setDragging(booking); e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.effectAllowed = "move";
+    // A böngésző megszakítja a húzást, ha a forrás-elem a dragstart alatt változik
+    // (pointer-events), ezért az állapotot egy pillanattal később állítjuk.
+    setTimeout(() => setDragging(booking), 0);
   }
   function onDrop(e, dateStr, time, stylistId) {
     e.preventDefault();
@@ -2427,7 +2430,7 @@ function App() {
                                   position:"absolute", top:`${topPx}px`, left:"2px", right:"2px",
                                   height:`${Math.max(heightPx-2, 16)}px`,
                                   background:"repeating-linear-gradient(45deg, #5a5a5a, #5a5a5a 6px, #474747 6px, #474747 12px)",
-                                  border:"1px solid #6f6f6f", borderRadius:"3px", zIndex: 2,
+                                  border:"1px solid #6f6f6f", borderRadius:"3px", zIndex: 2, pointerEvents: dragging ? "none" : undefined,
                                   display:"flex", alignItems:"center", justifyContent:"space-between", padding:"2px 6px", overflow:"hidden",
                                 }}>
                                   <span style={{fontSize:"10px", fontWeight:"700", color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>⛔ {bl.reason || "Elfoglalt"} · {bl.from}–{bl.to}</span>
@@ -2528,6 +2531,10 @@ function App() {
                                     left:"2px",
                                     right:"2px",
                                     height:`${heightPx - 2}px`,
+                                    // Húzás közben "átlátszó" az egérnek: így a rács kapja az ejtést akkor is,
+                                    // ha a kurzor egy másik foglalás vagy a saját régi helye fölött van.
+                                    pointerEvents: dragging ? "none" : undefined,
+                                    opacity: dragging && dragging.id === b.id ? 0.45 : 1,
                                     background: touchDragging?.id === b.id ? C.accent : b.status==="completed" ? "#7cb87c" : b.status==="noshow" ? "#dc4a3d" : "#f4a89f",
                                     color: "#1a1a1a",
                                     borderRadius:"3px",
