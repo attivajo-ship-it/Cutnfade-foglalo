@@ -30,10 +30,12 @@
     </div>
   </div>
 
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Pontos verziók (AUDIT 2026-11-11 #6): verzió nélkül egy új kiadás leállíthatja az oldalt.
+       Frissítés csak tesztelés után. A Babel 8 miatt kell a lenti react-classic preset. -->
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@8.1.1/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0"></script>
 
   <!-- JSX classic runtime: a globális React.createElement-et használja, nem importál "react/jsx-runtime"-ot -->
   <script>
@@ -279,11 +281,25 @@ function App() {
   const [sessionChecked, setSessionChecked] = React.useState(false);
   React.useEffect(() => {
     if (!sb) { setSessionChecked(true); return; }
-    sb.auth.getSession().then(({ data }) => {
-      const ok = !!(data && data.session);
-      setHasSession(ok);
-      // localStorage-ban maradt szerep érvényes belépés nélkül -> kiléptetjük
-      if (!ok) setAuthRole(r => (r === "admin" || r === "stylist" || r === "client") ? null : r);
+    sb.auth.getSession().then(async ({ data }) => {
+      const session = data && data.session;
+      if (!session) {
+        // localStorage-ban maradt szerep érvényes belépés nélkül -> kiléptetjük
+        setAuthRole(r => (r === "admin" || r === "stylist" || r === "client") ? null : r);
+      } else {
+        // A szerepet MINDIG az adatbázisból vesszük (a localStorage átírható)
+        try {
+          const { data: au } = await sb.from("app_users").select("role, stylist_ext_id").eq("user_id", session.user.id).maybeSingle();
+          if (au && (au.role === "admin" || au.role === "stylist")) {
+            setAuthRole(au.role);
+            setAuthStylistId(au.role === "stylist" && au.stylist_ext_id ? Number(au.stylist_ext_id) : null);
+          } else {
+            setAuthRole(null); setAuthStylistId(null);
+            try { await sb.auth.signOut(); } catch {}
+          }
+        } catch {}
+      }
+      setHasSession(!!session);
       setSessionChecked(true);
     }).catch(() => setSessionChecked(true));
     const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setHasSession(!!session));
@@ -1311,12 +1327,19 @@ function App() {
     try {
       const { data, error } = await sb.auth.signInWithPassword({ email, password: loginPassword });
       if (error || !data || !data.user) { setPinError(true); return; }
-      // szerepkör az app_users táblából
-      let role = "admin", sid = null;
+      // Szerepkör az app_users táblából. Akit nem vettek fel munkatársnak, az NEM léphet be
+      // (régen alapból adminnak számított — AUDIT 2026-11-11 #1).
+      let role = null, sid = null;
       try {
-        const { data: au } = await sb.from("app_users").select("role, stylist_ext_id").eq("email", email).single();
-        if (au) { role = au.role || "admin"; sid = au.stylist_ext_id; }
+        const { data: au } = await sb.from("app_users").select("role, stylist_ext_id").eq("user_id", data.user.id).maybeSingle();
+        if (au && (au.role === "admin" || au.role === "stylist")) { role = au.role; sid = au.stylist_ext_id; }
       } catch {}
+      if (!role) {
+        try { await sb.auth.signOut(); } catch {}
+        setPinError(true);
+        showToast("Ez a fiók nincs felvéve munkatársnak.", "error");
+        return;
+      }
       if (role === "stylist") {
         const local = stylists.find(s => String(s.id) === String(sid));
         setAuthRole("stylist");
