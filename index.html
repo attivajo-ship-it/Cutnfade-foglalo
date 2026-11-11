@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <meta name="description" content="Cut N' Fade - Foglalási rendszer prémium barbershop Nyíregyháza" />
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="theme-color" content="#047857" />
   <!-- PRÓBAIDŐSZAK: a keresők ne vegyék fel az oldalt. Élesítéskor TÖRÖLD ezt a sort. -->
   <meta name="robots" content="noindex, nofollow" />
   <title>Cut N' Fade · Foglalás</title>
@@ -12,19 +12,19 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { background: #0a0a0a; color: #f5f5f5; font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; }
+    html, body { background: #f6f8f7; color: #141a17; font-family: 'DM Sans', -apple-system, sans-serif; min-height: 100vh; }
     #root { min-height: 100vh; }
     .loader { display:flex; align-items:center; justify-content:center; height:100vh; flex-direction:column; gap:16px; }
-    .loader .logo { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; letter-spacing: 0.15em; }
-    .loader .sub { font-size: 11px; color: #787878; letter-spacing: 0.2em; }
-    .spinner { width: 32px; height: 32px; border: 2px solid #2a2a2a; border-top-color: #f5f5f5; border-radius: 50%; animation: spin 0.8s linear infinite; margin-top: 8px; }
+    .loader .logo { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 34px; letter-spacing: 0.08em; }
+    .loader .sub { font-size: 11px; color: #65706b; letter-spacing: 0.2em; }
+    .spinner { width: 32px; height: 32px; border: 2px solid #dfe7e3; border-top-color: #047857; border-radius: 50%; animation: spin 0.8s linear infinite; margin-top: 8px; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <div id="root">
     <div class="loader">
-      <div class="logo">CUT N' <em>FADE</em></div>
+      <div class="logo">CUT N' <span style="color:#047857">FADE</span></div>
       <div class="sub">BARBERSHOP · NYÍREGYHÁZA</div>
       <div class="spinner"></div>
     </div>
@@ -1522,6 +1522,7 @@ function App() {
   // CUT N' FADE STÍLUS: fekete-fehér, monokróm
   // === SZÍN-TÉMÁK ===
   const THEMES = {
+    smaragd: { name:"Smaragd (világos)", metal:false, light:true, bg:"#f6f8f7", surface:"#ffffff", surfaceAlt:"#eef4f1", border:"#dfe7e3", text:"#141a17", sub:"#65706b", accent:"#047857", accentText:"#ffffff", m:["#047857","#047857","#047857","#047857","#047857"] },
     mono:    { name:"Monokróm", metal:false, bg:"#0a0a0a", surface:"#141414", surfaceAlt:"#1c1c1c", border:"#2a2a2a", text:"#f5f5f5", sub:"#787878", accent:"#f5f5f5", accentText:"#0a0a0a", m:["#f5f5f5","#c8c8c8","#ffffff","#a0a0a0","#e0e0e0"] },
     chrome:  { name:"Króm / Ezüst", metal:true, bg:"#0c0d0f", surface:"#16181c", surfaceAlt:"#1e2126", border:"#363a42", text:"#eef0f4", sub:"#9098a4", accent:"#c8ccd4", accentText:"#0c0d0f", m:["#f4f5f7","#b8bcc6","#e2e4ea","#8e939e","#d4d7de"] },
     gold:    { name:"Arany fém", metal:true, bg:"#0d0b07", surface:"#16130c", surfaceAlt:"#1f1a10", border:"#3a2f1a", text:"#f5ecd8", sub:"#9a8a6a", accent:"#d4af6a", accentText:"#0d0b07", m:["#f8e4a0","#c89a3a","#f0d278","#a87e28","#e8c86a"] },
@@ -1540,7 +1541,7 @@ function App() {
     text: TH.text,
     textDim: TH.sub,
     sub: TH.sub,
-    muted: "#505050",
+    muted: TH.light ? "#8c9691" : "#505050",
     border: TH.border,
     borderLight: TH.border,
     accent: TH.accent,
@@ -1548,21 +1549,24 @@ function App() {
     accentSoft: TH.surfaceAlt,
     accentDark: TH.border,
     danger: "#dc4a3d",
-    success: "#7cb87c",
+    success: TH.light ? "#2f8f4e" : "#7cb87c",
     warning: "#d49a3a",
     info: "#a8a8a8",
     metalGrad, // fémes gradient vagy null
     isMetal: TH.metal,
+    isLight: !!TH.light,
   };
 
   const S = {
-    app: { fontFamily: "'Inter', -apple-system, sans-serif", minHeight:"100vh", background: C.bg, color: C.text, paddingBottom: "40px" },
-    header: { background: "linear-gradient(180deg, #141414 0%, #0a0a0a 100%)", borderBottom: `1px solid ${C.border}`, padding: "16px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"12px" },
-    logo: { fontFamily: "'Playfair Display', serif", fontSize: "20px", fontWeight: "700", letterSpacing: "0.15em", color: C.text },
-    logoAccent: { color: C.accent, fontStyle: "italic" },
+    app: { fontFamily: "'DM Sans', -apple-system, sans-serif", minHeight:"100vh", background: C.bg, color: C.text, paddingBottom: "40px" },
+    header: { background: C.isLight ? C.surface : "linear-gradient(180deg, #141414 0%, #0a0a0a 100%)", borderBottom: `1px solid ${C.border}`, padding: "16px 24px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"12px" },
+    logo: { fontFamily: "'Bebas Neue', Impact, sans-serif", fontSize: "20px", fontWeight: "400", letterSpacing: "0.15em", color: C.text },
+    logoAccent: { color: C.accent },
     main: { maxWidth: view === "admin" && adminUnlocked ? "1600px" : "1100px", margin: "0 auto", padding: "20px 16px" },
     card: { background: C.surface, borderRadius: "8px", padding: "20px", marginBottom: "12px", border: `1px solid ${C.border}` },
-    cardHero: { background: `linear-gradient(135deg, ${C.surface} 0%, ${C.surfaceAlt} 100%)`, borderRadius: "12px", padding: "32px 24px", marginBottom: "16px", border: `1px solid ${C.border}`, textAlign:"center", position:"relative", overflow:"hidden" },
+    cardHero: C.isLight
+      ? { background: "transparent", padding: "18px 4px 8px", marginBottom: "8px", textAlign:"left", position:"relative" }
+      : { background: `linear-gradient(135deg, ${C.surface} 0%, ${C.surfaceAlt} 100%)`, borderRadius: "12px", padding: "32px 24px", marginBottom: "16px", border: `1px solid ${C.border}`, textAlign:"center", position:"relative", overflow:"hidden" },
     label: { fontSize: "10px", fontWeight: "700", color: C.accent, textTransform: "uppercase", letterSpacing: "0.2em", marginBottom: "12px", display:"block" },
     input: { width: "100%", padding: "12px 14px", borderRadius: "6px", border: `1px solid ${C.border}`, background: C.surfaceAlt, fontSize: "14px", color: C.text, outline: "none", boxSizing: "border-box", fontFamily: "inherit" },
     btn: { background: C.metalGrad || C.accent, color: C.accentText, border: "none", borderRadius: "6px", padding: "13px 24px", fontSize: "13px", fontWeight: "700", cursor: "pointer", letterSpacing: "0.1em", textTransform:"uppercase", boxShadow: C.isMetal ? "inset 0 1px 2px rgba(255,255,255,0.45), inset 0 -2px 4px rgba(0,0,0,0.2), 0 3px 10px rgba(0,0,0,0.35)" : "none" },
@@ -1584,7 +1588,7 @@ function App() {
     return (
       <div style={{...S.app, padding:"16px"}}>
         <div style={box}>
-          <div style={{fontFamily:"'Playfair Display', serif", fontSize:"22px", fontWeight:"700", letterSpacing:"0.12em", marginBottom:"18px"}}>CUT N' <em>FADE</em></div>
+          <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontSize:"22px", fontWeight: "400", letterSpacing:"0.12em", marginBottom:"18px"}}>CUT N' <em>FADE</em></div>
           {ci === null && <div style={{color:C.sub}}>Betöltés…</div>}
           {ci && !ci.found && cancelState !== "done" && (
             <div style={{fontSize:"14px", color:C.textDim}}>{ci.already ? "Ezt a foglalást már lemondták." : "Ez a lemondási link érvénytelen vagy lejárt."}</div>
@@ -1629,7 +1633,7 @@ function App() {
   return (
     <div style={S.app}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Bebas+Neue&display=swap');
         * { box-sizing: border-box; }
         input:focus, select:focus, textarea:focus { border-color: ${C.accent} !important; }
         button { transition: all 0.2s; }
@@ -1637,6 +1641,10 @@ function App() {
         button:active { transform: translateY(0); opacity: 0.85; }
         button:disabled { opacity: 0.3; cursor: not-allowed; }
         .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .hdr-name { white-space: nowrap; }
+        @media (max-width: 520px) { .hdr-sub { display: none !important; } .hdr-name { font-size: 20px !important; } .hdr-logo { width: 38px !important; height: 38px !important; } }
+        .barber-pick { background: none; border: none; padding: 4px 2px; cursor: pointer; text-align: center; min-width: 64px; font-family: inherit; color: inherit; }
+        .barber-pick:disabled { cursor: not-allowed; }
         .scroll-x::-webkit-scrollbar { height: 4px; }
         .scroll-x::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 2px; }
         .booking-chip { cursor: grab; user-select: none; }
@@ -1657,7 +1665,7 @@ function App() {
       <div style={S.header}>
         <div style={{display:"flex", alignItems:"center", gap:"12px"}}>
           {/* CNF kör ikon */}
-          <svg width="48" height="48" viewBox="0 0 100 100" style={{display:"block", flexShrink:0}}>
+          <svg className="hdr-logo" width="48" height="48" viewBox="0 0 100 100" style={{display:"block", flexShrink:0}}>
             <defs>
               <linearGradient id="cnfFade" x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor="#ffffff"/>
@@ -1675,22 +1683,27 @@ function App() {
               <>
                 <circle cx="50" cy="50" r="47" fill="url(#cnfMetal)" stroke={TH.m[2]} strokeWidth="2"/>
                 <circle cx="50" cy="50" r="41" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1"/>
-                <text x="50" y="62" fill={C.accentText} fontSize="30" fontWeight="bold" textAnchor="middle" fontFamily="Georgia, 'Playfair Display', serif" letterSpacing="1">CNF</text>
+                <text x="50" y="62" fill={C.accentText} fontSize="30" fontWeight="400" textAnchor="middle" fontFamily="'Bebas Neue', Impact, sans-serif" letterSpacing="1">CNF</text>
               </>
             ) : (
               <>
-                <circle cx="50" cy="50" r="47" fill="#0a0a0a" stroke="#f5f5f5" strokeWidth="2.5"/>
-                <circle cx="50" cy="50" r="41" fill="none" stroke="#333" strokeWidth="1"/>
-                <text x="50" y="62" fill="url(#cnfFade)" fontSize="30" fontWeight="bold" textAnchor="middle" fontFamily="Georgia, 'Playfair Display', serif" letterSpacing="1">CNF</text>
+                <circle cx="50" cy="50" r="47" fill={C.isLight ? C.accent : "#0a0a0a"} stroke={C.isLight ? C.accent : "#f5f5f5"} strokeWidth="2.5"/>
+                <circle cx="50" cy="50" r="41" fill="none" stroke={C.isLight ? "rgba(255,255,255,0.35)" : "#333"} strokeWidth="1"/>
+                <text x="50" y="64" fill={C.isLight ? "#ffffff" : "url(#cnfFade)"} fontSize="34" fontWeight="400" textAnchor="middle" fontFamily="'Bebas Neue', Impact, sans-serif" letterSpacing="1">CNF</text>
               </>
             )}
           </svg>
           {/* Felirat */}
           <div>
-            <div style={{fontSize:"22px", fontWeight:"700", color: C.text, fontFamily:"Georgia, 'Playfair Display', serif", letterSpacing:"0.02em", lineHeight:1.1}}>CNF Foglaló</div>
-            <div style={{fontSize:"10px", color: C.sub, marginTop:"3px", letterSpacing:"0.15em", textTransform:"uppercase", display:"flex", alignItems:"center", gap:"6px"}}>
-              <span style={{width:"7px", height:"7px", borderRadius:"50%", background: dbStatus === true ? "#4ade80" : dbStatus === false ? "#dc4a3d" : "#d49a3a", boxShadow: dbStatus === true ? "0 0 6px #4ade80" : "none", flexShrink:0}}></span>
-              {dbStatus === true ? "Adatbázis kapcsolódva" : dbStatus === false ? "Nincs adatbázis kapcsolat" : "Kapcsolódás..."}
+            {/* A szalon neve (beállításokból); az adatbázis-állapot csak a munkatársaknak látszik */}
+            <div className="hdr-name" style={{fontSize:"24px", fontWeight: "400", color: C.text, fontFamily:"'Bebas Neue', Impact, sans-serif", letterSpacing:"0.06em", lineHeight:1.05}}>{settings.salonName || "Foglalás"}</div>
+            <div className="hdr-sub" style={{fontSize:"10px", color: C.sub, marginTop:"3px", letterSpacing:"0.15em", textTransform:"uppercase", display:"flex", alignItems:"center", gap:"6px"}}>
+              {staffMode ? (
+                <>
+                  <span style={{width:"7px", height:"7px", borderRadius:"50%", background: dbStatus === true ? "#22c55e" : dbStatus === false ? "#dc4a3d" : "#d49a3a", flexShrink:0}}></span>
+                  {dbStatus === true ? "Adatbázis kapcsolódva" : dbStatus === false ? "Nincs adatbázis kapcsolat" : "Kapcsolódás..."}
+                </>
+              ) : (settings.salonSub || "Online időpontfoglalás")}
             </div>
           </div>
         </div>
@@ -1726,10 +1739,12 @@ function App() {
         {view === "book" && !bookingDone && (
           <>
             <div style={S.cardHero}>
-              <div style={{fontSize:"11px", color: C.accent, letterSpacing:"0.3em", marginBottom:"12px"}}>★ ★ ★ ★ ★</div>
-              <div style={{fontFamily:"'Playfair Display', serif", fontSize:"32px", fontWeight:"700", letterSpacing:"0.05em", marginBottom:"8px"}}>{T.heroTitle1} <span style={{color:C.accent, fontStyle:"italic"}}>{T.heroTitle2}</span></div>
-              <div style={{fontSize:"13px", color:C.textDim, maxWidth:"400px", margin:"0 auto"}}>{T.heroSub}</div>
-              <div className="hero-line" style={{margin:"20px auto 0", maxWidth:"60px"}}></div>
+              {!C.isLight && <div style={{fontSize:"11px", color: C.accent, letterSpacing:"0.3em", marginBottom:"12px"}}>★ ★ ★ ★ ★</div>}
+              <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontSize: C.isLight ? "44px" : "32px", lineHeight: C.isLight ? 0.95 : 1.2, fontWeight: "400", letterSpacing:"0.04em", marginBottom:"10px"}}>
+                {T.heroTitle1}{C.isLight ? <br/> : " "}<span style={{color:C.accent}}>{T.heroTitle2}</span>
+              </div>
+              <div style={{fontSize:"14px", color:C.textDim, maxWidth:"420px", margin: C.isLight ? "0" : "0 auto"}}>{T.heroSub}</div>
+              {!C.isLight && <div className="hero-line" style={{margin:"20px auto 0", maxWidth:"60px"}}></div>}
             </div>
 
             {/* Foglalj újra / Regisztráció */}
@@ -1871,13 +1886,19 @@ function App() {
             {/* Barber - ELŐSZÖR */}
             <div style={S.card}>
               <span style={S.label}>{T.chooseBarber}</span>
-              <div className="scroll-x" style={{display:"flex", gap:"6px"}}>
+              <div className="scroll-x" style={{display:"flex", gap:"10px", paddingBottom:"4px"}}>
                 {stylists.map(s => {
                   const working = isStylistWorking(s.id, selectedDate) && isWithinBookingWindow(s, selectedDate);
+                  const sel = form.stylist === s.id;
                   return (
-                    <button key={s.id} style={{...S.chip(form.stylist===s.id), opacity: working ? 1 : 0.35}}
-                      onClick={() => working && setForm(f=>({...f, stylist:s.id, service: null, time:""}))} disabled={!working}>
-                      {s.initials} · {s.name.split(" ")[0]}
+                    <button key={s.id} className="barber-pick" style={{opacity: working ? 1 : 0.35}}
+                      onClick={() => working && setForm(f=>({...f, stylist:s.id, service: null, time:""}))} disabled={!working}
+                      aria-pressed={sel} title={working ? s.name : `${s.name} — ezen a napon nem dolgozik`}>
+                      <div style={{width:"52px", height:"52px", margin:"0 auto", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                        fontWeight:"700", fontSize:"15px", letterSpacing:"0.03em",
+                        background: sel ? C.accent : C.surfaceAlt, color: sel ? C.accentText : C.text,
+                        border: `2px solid ${sel ? C.accent : C.border}`}}>{s.initials}</div>
+                      <div style={{fontSize:"12px", marginTop:"6px", fontWeight: sel ? "700" : "500", color: sel ? C.accent : C.text, whiteSpace:"nowrap"}}>{s.name.split(" ")[0]}</div>
                     </button>
                   );
                 })}
@@ -1894,18 +1915,32 @@ function App() {
                     return <div style={{fontSize:"12px", color:C.muted, padding:"10px"}}>{T.noServices}</div>;
                   }
                   return (
-                    <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:"8px"}}>
-                      {stylistServices.map(s => (
-                        <div key={s.id} onClick={() => setForm(f=>({...f, service:s.id, time:""}))}
-                          style={{padding:"14px", borderRadius:"6px", border:`1px solid ${form.service===s.id ? C.accent : C.border}`, background: form.service===s.id ? C.accentSoft : C.surfaceAlt, cursor:"pointer", position:"relative"}}>
-                          <div style={{fontWeight:"700", fontSize:"13px", textTransform:"uppercase", letterSpacing:"0.05em"}}>{s.name}</div>
-                          {s.desc && <div style={{fontSize:"11px", color:C.sub, marginTop:"4px"}}>{s.desc}</div>}
-                          <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginTop:"10px"}}>
-                            <div style={{fontSize:"15px", fontWeight:"700", color:C.accent}}>{s.price.toLocaleString()} Ft</div>
-                            <div style={{fontSize:"10px", color:C.sub}}>{s.duration} {T.minutes}</div>
+                    <div style={{display:"grid", gridTemplateColumns: C.isLight ? "1fr" : "repeat(auto-fit, minmax(160px, 1fr))", gap:"8px"}}>
+                      {stylistServices.map(s => {
+                        const sel = form.service === s.id;
+                        return C.isLight ? (
+                          /* Világos téma: tömör sor — balra név + időtartam, jobbra ár */
+                          <div key={s.id} role="button" aria-pressed={sel} onClick={() => setForm(f=>({...f, service:s.id, time:""}))}
+                            style={{padding:"12px 14px", borderRadius:"10px", border:`${sel ? 2 : 1}px solid ${sel ? C.accent : C.border}`,
+                              background: sel ? "#e3f4ec" : C.surface, cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center", gap:"10px"}}>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontWeight:"700", fontSize:"15px"}}>{s.name}</div>
+                              <div style={{fontSize:"12px", color:C.sub, marginTop:"2px"}}>{s.duration} perc{s.desc ? ` · ${s.desc}` : ""}</div>
+                            </div>
+                            <div style={{fontSize:"15px", fontWeight:"700", color: sel ? C.accent : C.text, whiteSpace:"nowrap"}}>{s.price.toLocaleString("hu-HU")} Ft</div>
                           </div>
-                        </div>
-                      ))}
+                        ) : (
+                          <div key={s.id} onClick={() => setForm(f=>({...f, service:s.id, time:""}))}
+                            style={{padding:"14px", borderRadius:"6px", border:`1px solid ${sel ? C.accent : C.border}`, background: sel ? C.accentSoft : C.surfaceAlt, cursor:"pointer", position:"relative"}}>
+                            <div style={{fontWeight:"700", fontSize:"13px", textTransform:"uppercase", letterSpacing:"0.05em"}}>{s.name}</div>
+                            {s.desc && <div style={{fontSize:"11px", color:C.sub, marginTop:"4px"}}>{s.desc}</div>}
+                            <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginTop:"10px"}}>
+                              <div style={{fontSize:"15px", fontWeight:"700", color:C.accent}}>{s.price.toLocaleString()} Ft</div>
+                              <div style={{fontSize:"10px", color:C.sub}}>{s.duration} {T.minutes}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })()}
@@ -1928,7 +1963,17 @@ function App() {
                   return svc ? `⏱ ${svc.name} – ${svc.duration} perc` : "";
                 })()}
               </div>
-              <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(60px, 1fr))", gap:"4px"}}>
+              {(() => {
+                // Világos téma: csak a SZABAD időpontok látszanak (a foglaltak csak zavarnak)
+                const svc0 = getStylistService(form.stylist, form.service);
+                const nowMin0 = now.getHours()*60 + now.getMinutes();
+                const freeCount = HOURS.filter(h => isSlotAvailable(form.stylist, selectedDate, h, svc0?.duration || 30)
+                  && !(selectedDate === formatDate(today) && timeToMinutes(h) <= nowMin0)).length;
+                return C.isLight && freeCount === 0 ? (
+                  <div style={{fontSize:"13px", color:C.sub, padding:"10px 2px"}}>Erre a napra nincs szabad időpont ennél a barbernél. Válassz másik napot vagy barbert.</div>
+                ) : null;
+              })()}
+              <div style={{display:"grid", gridTemplateColumns: C.isLight ? "repeat(auto-fill, minmax(72px, 1fr))" : "repeat(auto-fill, minmax(60px, 1fr))", gap: C.isLight ? "8px" : "4px"}}>
                 {HOURS.map(h => {
                   const svc = getStylistService(form.stylist, form.service);
                   const duration = svc?.duration || 30;
@@ -1937,6 +1982,15 @@ function App() {
                   const isPast = selectedDate === formatDate(today) && timeToMinutes(h) <= nowMin;
                   const available = isSlotAvailable(form.stylist, selectedDate, h, duration) && !isPast;
                   const active = form.time === h;
+                  if (C.isLight && !available) return null;
+                  if (C.isLight) return (
+                    <button key={h} onClick={() => setForm(f=>({...f, time:h}))} aria-pressed={active}
+                      style={{padding:"11px 2px", borderRadius:"10px", border:`${active ? 2 : 1}px solid ${active ? C.accent : C.border}`,
+                        background: active ? C.accent : C.surface, color: active ? C.accentText : C.text,
+                        cursor:"pointer", fontSize:"14px", fontWeight: active ? "700" : "600", fontFamily:"inherit"}}>
+                      {h}
+                    </button>
+                  );
                   return (
                     <button key={h} disabled={!available}
                       onClick={() => setForm(f=>({...f, time:h}))}
@@ -2016,7 +2070,7 @@ function App() {
         {view === "book" && bookingDone && (
           <div style={{...S.card, textAlign:"center", padding:"48px 20px"}}>
             <div style={{fontSize:"40px", marginBottom:"16px"}}>💈</div>
-            <div style={{fontFamily:"'Playfair Display', serif", fontSize:"24px", fontWeight:"700", marginBottom:"8px"}}>{T.booking} <span style={{color:C.accent, fontStyle:"italic"}}>{T.bookingConfirmed}</span></div>
+            <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontSize:"24px", fontWeight: "400", marginBottom:"8px"}}>{T.booking} <span style={{color:C.accent}}>{T.bookingConfirmed}</span></div>
             <div className="hero-line" style={{margin:"20px auto", maxWidth:"40px"}}></div>
             <div style={{color:C.textDim, fontSize:"14px", marginBottom:"6px"}}>
               {parseDate(selectedDate).toLocaleDateString(lang==="hu"?"hu-HU":"en-GB",{year:"numeric",month:"long",day:"numeric"})} · {form.time}
@@ -2039,7 +2093,7 @@ function App() {
         {view === "admin" && !adminUnlocked && (
           <div style={{...S.card, maxWidth:"360px", margin:"40px auto"}}>
             <div style={{textAlign:"center", fontSize:"32px", marginBottom:"12px"}}>🔒</div>
-            <div style={{fontFamily:"'Playfair Display', serif", fontSize:"20px", fontWeight:"700", marginBottom:"4px", textAlign:"center"}}>Belépés</div>
+            <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontSize:"20px", fontWeight: "400", marginBottom:"4px", textAlign:"center"}}>Belépés</div>
             <div style={{fontSize:"12px", color:C.sub, marginBottom:"20px", textAlign:"center"}}>Admin vagy barber</div>
 
             <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Email</div>
@@ -2460,7 +2514,7 @@ function App() {
                       return (
                         <div key={s.id} data-col-stylist={s.id} style={{flex:1, minWidth:"140px"}}>
                           {/* Fejléc */}
-                          <div style={{textAlign:"center", padding:"12px 6px", background: working ? "#ffffff" : "#2a2a2a", borderRadius:"4px 4px 0 0", opacity: working ? 1 : 0.7, minHeight:"64px", display:"flex", flexDirection:"column", justifyContent:"center", position:"sticky", top:0, zIndex:6, borderBottom:`2px solid ${working ? s.color : C.border}`}}>
+                          <div style={{textAlign:"center", padding:"12px 6px", background: working ? "#ffffff" : (C.isLight ? C.surfaceAlt : "#2a2a2a"), borderRadius:"4px 4px 0 0", opacity: working ? 1 : 0.7, minHeight:"64px", display:"flex", flexDirection:"column", justifyContent:"center", position:"sticky", top:0, zIndex:6, borderBottom:`2px solid ${working ? s.color : C.border}`}}>
                             <div style={{fontSize:"13px", fontWeight:"800", color:"#0a0a0a"}}>
                               <span style={{display:"inline-block", padding:"2px 8px", borderRadius:"10px", background:s.color, marginRight:"6px", color:"#0a0a0a"}}>{s.initials}</span>
                               {s.name}
@@ -2509,7 +2563,7 @@ function App() {
                             {!working && (
                               <div style={{
                                 position:"absolute", inset:0,
-                                background:"repeating-linear-gradient(45deg, #2a2a2a, #2a2a2a 8px, #1f1f1f 8px, #1f1f1f 16px)",
+                                background: C.isLight ? `repeating-linear-gradient(45deg, ${C.surfaceAlt}, ${C.surfaceAlt} 8px, ${C.bg} 8px, ${C.bg} 16px)` : "repeating-linear-gradient(45deg, #2a2a2a, #2a2a2a 8px, #1f1f1f 8px, #1f1f1f 16px)",
                                 display:"flex", alignItems:"center", justifyContent:"center",
                                 zIndex: 0,
                               }}>
@@ -3507,7 +3561,7 @@ function App() {
       {selectedBooking && (
         <div onClick={() => setSelectedBooking(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
           <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"380px", width:"100%", border:`1px solid ${C.border}`}}>
-            <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px"}}>{selectedBooking.clientName}</div>
+            <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"20px"}}>{selectedBooking.clientName}</div>
             <div style={{fontSize:"12px", color:C.sub, marginBottom:"14px"}}>📞 {selectedBooking.clientPhone}</div>
             <div style={{padding:"14px", background:C.accentSoft, borderRadius:"6px", marginBottom:"14px", border:`1px solid ${C.accentDark}`}}>
               <div style={{fontSize:"14px", fontWeight:"700"}}>{selectedBooking.date} · {selectedBooking.time}</div>
@@ -3583,7 +3637,7 @@ function App() {
         return (
           <div onClick={() => setSelectedClient(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
             <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"420px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
-              <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"22px"}}>{selectedClient.name}</div>
+              <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"22px"}}>{selectedClient.name}</div>
               <div style={{fontSize:"12px", color:C.sub, marginBottom:"4px"}}>📞 {selectedClient.phone}</div>
               {selectedClient.email && <div style={{fontSize:"12px", color:C.sub, marginBottom:"14px"}}>✉ {selectedClient.email}</div>}
 
@@ -3694,7 +3748,7 @@ function App() {
           <div onClick={() => setShowDayClose(false)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
             <div onClick={e => e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"460px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
               <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"4px"}}>
-                <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"22px"}}>📊 Napi zárás</div>
+                <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"22px"}}>📊 Napi zárás</div>
                 <button onClick={() => setShowDayClose(false)} style={{background:"none", border:"none", color:C.sub, fontSize:"22px", cursor:"pointer"}}>×</button>
               </div>
               <div style={{fontSize:"12px", color:C.sub, marginBottom:"16px"}}>{parseDate(adminDate).toLocaleDateString("hu-HU",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
@@ -3769,7 +3823,7 @@ function App() {
       {quickBooking && (
         <div onClick={() => setQuickBooking(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
           <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"400px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
-            <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px", marginBottom:"4px"}}>{quickForm.mode === "block" ? "⛔ Elfoglaltság" : quickForm.mode === "dayoff" ? "🏖 Szabadnap" : "+ Új foglalás"}</div>
+            <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"20px", marginBottom:"4px"}}>{quickForm.mode === "block" ? "⛔ Elfoglaltság" : quickForm.mode === "dayoff" ? "🏖 Szabadnap" : "+ Új foglalás"}</div>
             <div style={{fontSize:"12px", color:C.accent, marginBottom:"16px", letterSpacing:"0.05em", fontWeight:"700"}}>📅 {quickBooking.date}</div>
 
             {/* Mód-váltó: Foglalás vagy Elfoglaltság */}
@@ -3942,7 +3996,7 @@ function App() {
       {showClientRegister && (
         <div onClick={() => setShowClientRegister(false)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
           <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"400px", width:"100%", border:`1px solid ${C.border}`}}>
-            <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px", marginBottom:"4px"}}>✨ Regisztráció</div>
+            <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"20px", marginBottom:"4px"}}>✨ Regisztráció</div>
             <div style={{fontSize:"12px", color:C.sub, marginBottom:"16px"}}>Hozz létre fiókot, hogy gyorsan foglalhass és lásd az időpontjaidat</div>
 
             <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Név *</div>
@@ -3972,7 +4026,7 @@ function App() {
       {showClientLogin && (
         <div onClick={() => setShowClientLogin(false)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
           <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"380px", width:"100%", border:`1px solid ${C.border}`}}>
-            <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px", marginBottom:"4px"}}>👤 Bejelentkezés</div>
+            <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"20px", marginBottom:"4px"}}>👤 Bejelentkezés</div>
             <div style={{fontSize:"12px", color:C.sub, marginBottom:"16px"}}>Lépj be a fiókodba</div>
 
             <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Email</div>
@@ -4029,7 +4083,7 @@ function App() {
         return (
           <div onClick={() => setPayingBooking(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1001}}>
             <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"380px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
-              <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px", marginBottom:"4px"}}>💰 Fizetés</div>
+              <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"20px", marginBottom:"4px"}}>💰 Fizetés</div>
               <div style={{fontSize:"12px", color:C.sub, marginBottom:"16px"}}>{payingBooking.clientName} · {payingBooking.service}</div>
 
               {/* Eredeti ár */}
@@ -4099,7 +4153,7 @@ function App() {
         return (
           <div onClick={() => setEditingBooking(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1001}}>
             <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"400px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
-              <div style={{fontFamily:"'Playfair Display', serif", fontWeight:"700", fontSize:"20px", marginBottom:"16px"}}>✏️ Foglalás szerkesztése</div>
+              <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"20px", marginBottom:"16px"}}>✏️ Foglalás szerkesztése</div>
 
               <div style={{marginBottom:"10px"}}>
                 <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Barber</div>
