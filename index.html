@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <meta name="description" content="Cut N' Fade - Foglalási rendszer prémium barbershop Nyíregyháza" />
   <meta name="theme-color" content="#0a0a0a" />
+  <!-- PRÓBAIDŐSZAK: a keresők ne vegyék fel az oldalt. Élesítéskor TÖRÖLD ezt a sort. -->
+  <meta name="robots" content="noindex, nofollow" />
   <title>Cut N' Fade · Foglalás</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -900,6 +902,13 @@ function App() {
         return;
       }
       setBusy(prev => [...prev, data.booking]);
+      // Visszaigazoló levél a háttérben (booking-mail Edge Function). A címzettet a szerver
+      // olvassa ki az adatbázisból; ha a levél nem megy ki, a foglalás attól még érvényes.
+      try {
+        sb.functions.invoke("booking-mail", { body: { salon: salonId, bookingId: String(data.booking.id) } })
+          .then(r => { if (r.error) console.warn("Visszaigazoló levél nem ment ki:", r.error); })
+          .catch(err => console.warn("Visszaigazoló levél hiba:", err));
+      } catch (err) { console.warn("Visszaigazoló levél hiba:", err); }
       setBookingDone(true);
       showToast("Foglalás rögzítve");
     } catch (err) {
