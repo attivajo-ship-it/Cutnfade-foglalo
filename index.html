@@ -188,6 +188,32 @@ const EMPTY_HOURS = {
   sun: { open: "09:00", close: "18:00", off: true },
 };
 
+// Jelszó beállító doboz: két mező (új + megerősítés) és egy gomb. Az onSubmit(jelszó) Promise-t ad vissza.
+function PasswordBox({ S, C, onSubmit, buttonLabel = "Jelszó mentése", hint }) {
+  const [pw, setPw] = React.useState("");
+  const [pw2, setPw2] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState(null); // { ok, text }
+  async function go() {
+    setMsg(null);
+    if (pw.length < 8) { setMsg({ ok:false, text:"Legalább 8 karakter legyen." }); return; }
+    if (pw !== pw2) { setMsg({ ok:false, text:"A két jelszó nem egyezik." }); return; }
+    setBusy(true);
+    try { await onSubmit(pw); setPw(""); setPw2(""); setMsg({ ok:true, text:"Jelszó beállítva." }); }
+    catch (e) { setMsg({ ok:false, text: (e && e.message) || "Nem sikerült, próbáld újra." }); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div>
+      <input type="password" autoComplete="new-password" style={{...S.input, marginBottom:"6px"}} placeholder="Új jelszó (min. 8 karakter)" value={pw} onChange={e=>{ setPw(e.target.value); setMsg(null); }} />
+      <input type="password" autoComplete="new-password" style={{...S.input, marginBottom:"8px"}} placeholder="Új jelszó még egyszer" value={pw2} onChange={e=>{ setPw2(e.target.value); setMsg(null); }} />
+      <button style={{...S.btnSec, width:"100%"}} disabled={busy} onClick={go}>{busy ? "Mentés…" : `🔑 ${buttonLabel}`}</button>
+      {msg && <div style={{fontSize:"12px", marginTop:"6px", color: msg.ok ? C.success : C.danger}}>{msg.text}</div>}
+      {hint && !msg && <div style={{fontSize:"11px", color:C.muted, marginTop:"6px"}}>{hint}</div>}
+    </div>
+  );
+}
+
 function App() {
   const today = getToday(); // mindig friss
 
@@ -1485,6 +1511,23 @@ function App() {
     setForm(f => ({ ...f, name: registerForm.name, phone: registerForm.phone, email: registerForm.email }));
     setRegisterForm({ name:"", phone:"", email:"", password:"" });
     showToast(`Sikeres regisztráció! Üdv, ${newClient.name}!`);
+  }
+
+  // ===== JELSZÓKEZELÉS =====
+  // Admin -> munkatárs: szerverfüggvényen át (staff-password), csak admin, csak saját szalon.
+  async function setStaffPassword(stylistId, password) {
+    const { data, error } = await sb.functions.invoke("staff-password", { body: { stylistExtId: String(stylistId), password } });
+    if (error) {
+      let m = "Nem sikerült beállítani.";
+      try { const j = await error.context.json(); if (j && j.error) m = j.error; } catch {}
+      throw new Error(m);
+    }
+    if (!data || !data.ok) throw new Error((data && data.error) || "Nem sikerült beállítani.");
+  }
+  // Saját jelszó: közvetlenül a Supabase Auth-tal
+  async function changeOwnPassword(password) {
+    const { error } = await sb.auth.updateUser({ password });
+    if (error) throw new Error(error.message || "Nem sikerült megváltoztatni.");
   }
 
   function logout() {
@@ -2989,7 +3032,7 @@ function App() {
                     <input style={{...S.input, marginBottom:"8px"}} placeholder="Név" value={newStylist.name} onChange={e=>setNewStylist({...newStylist, name:e.target.value})} />
                     <input style={{...S.input, marginBottom:"8px"}} placeholder="Iniciálé (pl. VA)" value={newStylist.initials} onChange={e=>setNewStylist({...newStylist, initials:e.target.value.toUpperCase().slice(0,2)})} />
                     <input type="email" style={{...S.input, marginBottom:"8px"}} placeholder="Email (pl. nev@cutnfade-nyiregyhaza.hu)" value={newStylist.email || ""} onChange={e=>setNewStylist({...newStylist, email:e.target.value})} />
-                    <input type="password" style={{...S.input, marginBottom:"8px"}} placeholder="Jelszó" value={newStylist.password || ""} onChange={e=>setNewStylist({...newStylist, password:e.target.value})} />
+                    <div style={{fontSize:"11px", color:C.muted, marginBottom:"8px"}}>ℹ️ Az új barber belépési fiókját külön kell létrehozni (szólj Claude-nak), utána itt állíthatsz neki jelszót.</div>
                     <div style={{display:"flex", gap:"6px"}}>
                       <button style={S.btn} onClick={addStylist}>Hozzáadás</button>
                       <button style={S.btnSec} onClick={() => setShowAddStylist(false)}>Mégse</button>
@@ -3006,8 +3049,14 @@ function App() {
                         <input style={{...S.input, marginBottom:"8px"}} value={editingStylist.initials} onChange={e=>setEditingStylist({...editingStylist, initials:e.target.value.toUpperCase().slice(0,2)})} />
                         <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Email</div>
                         <input type="email" style={{...S.input, marginBottom:"8px"}} value={editingStylist.email || ""} onChange={e=>setEditingStylist({...editingStylist, email:e.target.value})} />
-                        <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Jelszó</div>
-                        <input type="password" style={{...S.input, marginBottom:"8px"}} value={editingStylist.password || ""} onChange={e=>setEditingStylist({...editingStylist, password:e.target.value})} />
+                        {isAdmin && (
+                          <div style={{margin:"4px 0 10px", padding:"10px", border:`1px solid ${C.border}`, borderRadius:"8px"}}>
+                            <div style={{fontSize:"11px", color:C.sub, marginBottom:"6px", fontWeight:"700"}}>Új jelszó a barbernek</div>
+                            <PasswordBox S={S} C={C} buttonLabel="Új jelszó beállítása"
+                              hint="A régi jelszó azonnal megszűnik. Az újat mondd meg a kollégának."
+                              onSubmit={pw => setStaffPassword(editingStylist.id, pw)} />
+                          </div>
+                        )}
                         <div style={{display:"flex", gap:"6px"}}>
                           <button style={S.btn} onClick={() => saveStylist(editingStylist)}>Mentés</button>
                           <button style={S.btnSec} onClick={() => setEditingStylist(null)}>Mégse</button>
@@ -3282,9 +3331,8 @@ function App() {
                     <input style={{...S.input, marginBottom:"10px"}} value={me.initials} onChange={e=>saveStylist({...me, initials:e.target.value.toUpperCase().slice(0,2)})} />
                     <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Email (belépéshez)</div>
                     <input type="email" style={{...S.input, marginBottom:"10px"}} value={me.email || ""} onChange={e=>saveStylist({...me, email:e.target.value})} />
-                    <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Jelszó</div>
-                    <input type="password" style={S.input} value={me.password || ""} onChange={e=>saveStylist({...me, password:e.target.value})} placeholder="Új jelszó beírása esetén" />
-                    <div style={{fontSize:"10px", color:C.muted, marginTop:"6px"}}>💡 A jelszót bármikor megváltoztathatod</div>
+                    <div style={{fontSize:"11px", color:C.sub, marginBottom:"6px", fontWeight:"700"}}>Jelszó módosítása</div>
+                    <PasswordBox S={S} C={C} buttonLabel="Jelszó megváltoztatása" hint="💡 A jelszót bármikor megváltoztathatod." onSubmit={changeOwnPassword} />
                   </div>
 
                   {/* Szolgáltatásaim */}
@@ -3435,8 +3483,8 @@ function App() {
                   <input style={{...S.input, marginBottom:"10px"}} value={settings.address} onChange={e=>setSettings({...settings, address:e.target.value})} />
                   <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Admin email</div>
                   <input type="email" style={{...S.input, marginBottom:"10px"}} value={settings.adminEmail || ""} onChange={e=>setSettings({...settings, adminEmail:e.target.value})} />
-                  <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Admin jelszó</div>
-                  <input type="password" style={S.input} value={settings.adminPassword || ""} onChange={e=>setSettings({...settings, adminPassword:e.target.value})} />
+                  <div style={{fontSize:"11px", color:C.sub, marginBottom:"6px", fontWeight:"700"}}>Saját (admin) jelszó módosítása</div>
+                  <PasswordBox S={S} C={C} buttonLabel="Jelszó megváltoztatása" onSubmit={changeOwnPassword} />
                 </div>
 
                 <div style={S.card}>
