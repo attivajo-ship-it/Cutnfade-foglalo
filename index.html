@@ -1704,6 +1704,9 @@ function App() {
         .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .hdr-name { white-space: nowrap; }
         .admin-layout { display: flex; gap: 20px; align-items: flex-start; }
+        .qb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .qb-svc { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        @media (max-width: 480px) { .qb-grid { grid-template-columns: 1fr; } }
         .admin-side { width: 230px; flex-shrink: 0; position: sticky; top: 12px; }
         .admin-content { flex: 1; min-width: 0; }
         .admin-tabs { display: flex; flex-direction: column; gap: 2px; }
@@ -3937,9 +3940,9 @@ function App() {
 
       {quickBooking && (
         <div onClick={() => setQuickBooking(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1000}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"400px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
-            <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"20px", marginBottom:"4px"}}>{quickForm.mode === "block" ? "⛔ Elfoglaltság" : quickForm.mode === "dayoff" ? "🏖 Szabadnap" : "+ Új foglalás"}</div>
-            <div style={{fontSize:"12px", color:C.accent, marginBottom:"16px", letterSpacing:"0.05em", fontWeight:"700"}}>📅 {quickBooking.date}</div>
+          <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"14px", padding:"20px", maxWidth:"560px", width:"100%", maxHeight:"90vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
+            <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontWeight: "400", fontSize:"22px", marginBottom:"2px"}}>{quickForm.mode === "block" ? "⛔ Elfoglaltság" : quickForm.mode === "dayoff" ? "🏖 Szabadnap" : "+ Új foglalás"}</div>
+            <div style={{fontSize:"12px", color:C.accent, marginBottom:"12px", letterSpacing:"0.05em", fontWeight:"700"}}>📅 {quickBooking.date}</div>
 
             {/* Mód-váltó: Foglalás vagy Elfoglaltság */}
             <div style={{display:"flex", gap:"6px", marginBottom:"16px"}}>
@@ -3948,7 +3951,8 @@ function App() {
               <button onClick={() => setQuickForm({...quickForm, mode: "dayoff"})} style={{flex:1, padding:"8px 4px", borderRadius:"6px", border:`1px solid ${quickForm.mode === "dayoff" ? C.accent : C.border}`, background: quickForm.mode === "dayoff" ? C.accent+"22" : "transparent", color: C.text, cursor:"pointer", fontSize:"11px", fontWeight:"700"}}>🏖 Szabadnap</button>
             </div>
 
-            <div style={{marginBottom:"10px"}}>
+            <div className="qb-grid" style={{marginBottom:"10px"}}>
+            <div>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Barber</div>
               <select style={S.input} value={quickBooking.stylistId} onChange={e => setQuickBooking({...quickBooking, stylistId: +e.target.value})}>
                 {stylists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -3956,7 +3960,7 @@ function App() {
             </div>
 
             {quickForm.mode !== "dayoff" && (
-            <div style={{marginBottom:"10px"}}>
+            <div>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Időpont <span style={{color:C.muted}}>(munkaidőn kívül is)</span></div>
               <select style={S.input} value={quickForm.time} onChange={e => setQuickForm({...quickForm, time: e.target.value})}>
                 <option value="">-- Válassz időpontot --</option>
@@ -3970,6 +3974,7 @@ function App() {
               </select>
             </div>
             )}
+            </div>
 
             {/* SZABADNAP mód */}
             {quickForm.mode === "dayoff" && (
@@ -4009,18 +4014,20 @@ function App() {
             {(!quickForm.mode || quickForm.mode === "booking") && (<>
             <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"6px"}}>Szolgáltatás(ok) <span style={{color:C.muted}}>– többet is választhatsz</span></div>
-              <div style={{display:"flex", flexDirection:"column", gap:"4px"}}>
+              <div className="qb-svc">
                 {getStylistServices(quickBooking.stylistId).map(s => {
                   const selected = (quickForm.serviceIds || []).includes(s.id);
                   return (
-                    <label key={s.id} style={{display:"flex", alignItems:"center", gap:"8px", padding:"8px 10px", borderRadius:"6px", cursor:"pointer", background: selected ? C.accentSoft : C.surfaceAlt, border:`1px solid ${selected ? C.accent : C.border}`}}>
+                    <label key={s.id} style={{display:"flex", alignItems:"center", gap:"6px", padding:"6px 8px", borderRadius:"8px", cursor:"pointer", background: selected ? C.accentSoft : C.surfaceAlt, border:`1px solid ${selected ? C.accent : C.border}`, minWidth:0}}>
                       <input type="checkbox" checked={selected} onChange={e => {
                         const cur = quickForm.serviceIds || [];
                         const next = e.target.checked ? [...cur, s.id] : cur.filter(id => id !== s.id);
                         setQuickForm({...quickForm, serviceIds: next, serviceId: next[0] || s.id});
                       }} />
-                      <span style={{flex:1, fontSize:"12px", fontWeight:"600"}}>{s.name}</span>
-                      <span style={{fontSize:"11px", color:C.sub}}>{s.price.toLocaleString()} Ft · {s.duration}p</span>
+                      <span style={{flex:1, minWidth:0, lineHeight:1.25}}>
+                        <span style={{display:"block", fontSize:"12px", fontWeight:"600", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{s.name}</span>
+                        <span style={{display:"block", fontSize:"10.5px", color:C.sub}}>{s.price.toLocaleString("hu-HU")} Ft · {s.duration}p</span>
+                      </span>
                     </label>
                   );
                 })}
@@ -4033,11 +4040,17 @@ function App() {
               })()}
             </div>
 
-            <div style={{marginBottom:"10px"}}>
+            <div className="qb-grid" style={{marginBottom:"10px"}}>
+            <div>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Vendég telefonszáma</div>
               <input style={S.input} placeholder="+36..." value={quickForm.clientPhone} onChange={e => { setQuickForm({...quickForm, clientPhone: e.target.value}); lookupQuickClient(e.target.value); setClientDropdown(true); }} />
               {quickForm.clientPhone && !quickForm.isNew && quickForm.clientName && <div style={{fontSize:"10px", color:C.success, marginTop:"3px"}}>✓ Meglévő: {quickForm.clientName}</div>}
               {quickForm.isNew && <div style={{fontSize:"10px", color:C.info, marginTop:"3px"}}>ℹ Új vendég</div>}
+            </div>
+            <div>
+              <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Név</div>
+              <input style={S.input} value={quickForm.clientName} onChange={e => { setQuickForm({...quickForm, clientName: e.target.value}); setClientDropdown(true); }} />
+            </div>
             </div>
 
             {/* Felbukkanó vendéglista — gépelés közben (név vagy telefon) */}
@@ -4065,11 +4078,6 @@ function App() {
             })()}
 
             <div style={{marginBottom:"10px"}}>
-              <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Név</div>
-              <input style={S.input} value={quickForm.clientName} onChange={e => { setQuickForm({...quickForm, clientName: e.target.value}); setClientDropdown(true); }} />
-            </div>
-
-            <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Email <span style={{color:C.muted}}>(nem kötelező — visszaigazolás és emlékeztető)</span></div>
               <input type="email" style={S.input} placeholder="vendeg@pelda.hu" value={quickForm.clientEmail || ""} onChange={e => setQuickForm({...quickForm, clientEmail: e.target.value})} />
               {(quickForm.clientEmail || "").trim() && (
@@ -4080,7 +4088,14 @@ function App() {
               )}
             </div>
 
-            <div style={{marginBottom:"12px"}}>
+            {/* Ritkán kell: megjegyzés + ismétlődés — kinyitható */}
+            {!(quickForm.showMore || quickForm.note || (quickForm.repeat && quickForm.repeat !== "none")) ? (
+              <button onClick={() => setQuickForm({...quickForm, showMore: true})}
+                style={{background:"none", border:"none", color:C.accent, fontWeight:"700", fontSize:"12px", cursor:"pointer", padding:"2px 0", marginBottom:"14px", fontFamily:"inherit"}}>
+                + Megjegyzés, ismétlődés
+              </button>
+            ) : (<>
+            <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Megjegyzés</div>
               <input style={S.input} value={quickForm.note} onChange={e => setQuickForm({...quickForm, note: e.target.value})} />
             </div>
@@ -4101,6 +4116,7 @@ function App() {
                 </div>
               )}
             </div>
+            </>)}
 
             </>)}
 
@@ -4371,7 +4387,7 @@ function App() {
           ))}
           {notifPerm === "default" && (
             <button onClick={enableDesktopNotifications}
-              style={{...S.btnSec, fontSize:"11px", padding:"8px 10px"}}>
+              style={{...S.btnSec, fontSize:"12px", padding:"9px 12px", background:C.surface, color:C.text, border:`1px solid ${C.border}`, borderRadius:"10px", boxShadow:"0 6px 20px rgba(0,0,0,0.18)", textAlign:"left", lineHeight:1.35}}>
               🖥️ Asztali értesítés is (akkor is szól, ha más lapon vagy)
             </button>
           )}
