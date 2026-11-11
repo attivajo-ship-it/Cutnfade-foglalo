@@ -33,7 +33,14 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <script type="text/babel" data-presets="react" data-type="module">
+  <!-- JSX classic runtime: a globális React.createElement-et használja, nem importál "react/jsx-runtime"-ot -->
+  <script>
+    Babel.registerPreset('react-classic', {
+      presets: [[Babel.availablePresets.react, { runtime: 'classic' }]]
+    });
+  </script>
+
+  <script type="text/babel" data-presets="react-classic" data-type="module">
 
 // === FORDÍTÁSOK (vendég oldal) ===
 const TRANSLATIONS = {
@@ -135,6 +142,11 @@ const load = (key, def) => { try { const v = localStorage.getItem(key); return v
 const SUPABASE_URL = "https://zeratolucqbxpbxncbyy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_DHWBbu7yG-uPpgqpENLYiw__BSK5LVg";
 const SALON_SLUG = "cutnfade"; // ez a szalon azonosítója
+// Vendégfiókok (regisztráció/belépés) — a próbaidőszakra kikapcsolva: a régi megoldás
+// titkosítatlanul tárolta a jelszót a nyilvános vendégkartonban. Visszakapcsolás előtt
+// szerveroldali (hash-elt) jelszókezelés kell.
+const CLIENT_ACCOUNTS_ENABLED = false;
+
 let sb = null;
 try {
   if (window.supabase && window.supabase.createClient) {
@@ -257,6 +269,36 @@ function App() {
   React.useEffect(() => { try { if (authRole) localStorage.setItem("cnf_authRole", authRole); else localStorage.removeItem("cnf_authRole"); } catch {} }, [authRole]);
   React.useEffect(() => { try { if (authStylistId != null) localStorage.setItem("cnf_authStylistId", String(authStylistId)); else localStorage.removeItem("cnf_authStylistId"); } catch {} }, [authStylistId]);
   const [authClientPhone, setAuthClientPhone] = React.useState(null);
+
+  // ===== ADATVÉDELEM =====
+  // A foglalások és vendégkartonok CSAK valódi (Supabase) belépéssel töltődnek le.
+  // A vendég oldal a szerver-függvényeken keresztül csak a foglalt idősávokat látja.
+  const [hasSession, setHasSession] = React.useState(false);
+  const [sessionChecked, setSessionChecked] = React.useState(false);
+  React.useEffect(() => {
+    if (!sb) { setSessionChecked(true); return; }
+    sb.auth.getSession().then(({ data }) => {
+      const ok = !!(data && data.session);
+      setHasSession(ok);
+      // localStorage-ban maradt szerep érvényes belépés nélkül -> kiléptetjük
+      if (!ok) setAuthRole(r => (r === "admin" || r === "stylist" || r === "client") ? null : r);
+      setSessionChecked(true);
+    }).catch(() => setSessionChecked(true));
+    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setHasSession(!!session));
+    return () => { try { sub && sub.subscription && sub.subscription.unsubscribe(); } catch {} };
+  }, []);
+  const staffMode = (authRole === "admin" || authRole === "stylist") && hasSession;
+
+  // Vendég módban: a korábban (régi verzió alatt) a böngészőbe mentett vendégadatok törlése
+  React.useEffect(() => {
+    if (!sessionChecked || staffMode) return;
+    setBookings([]); setClients([]);
+    bookingsLoadedRef.current = false; clientsLoadedRef.current = false;
+    try { ["cnf_bookings", "cnf_clients"].forEach(k => localStorage.removeItem(k)); } catch {}
+  }, [sessionChecked, staffMode]);
+
+  // Vendég módban a foglalt idősávok (név/telefon nélkül) a szerverről
+  const [busy, setBusy] = React.useState([]);
   const [pinError, setPinError] = React.useState(false);
   const [showClientRegister, setShowClientRegister] = React.useState(false);
   const [showClientLogin, setShowClientLogin] = React.useState(false);
@@ -346,8 +388,12 @@ function App() {
   }
 
   // Foglalások szinkronizálása a Supabase-be (upsert + törlés)
+  // Első sikeres letöltés megtörtént? Addig nem küldünk fel semmit (a régi helyi
+  // gyorsítótár ne írhassa felül a frissebb adatbázist).
+  const bookingsLoadedRef = React.useRef(false);
+
   async function syncBookingsUp(list) {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode || !bookingsLoadedRef.current) return;
     try {
       // 1) Upsert (beszúr vagy frissít) minden foglalást
       if (list.length > 0) {
@@ -373,16 +419,18 @@ function App() {
 
   // Foglalások letöltése a Supabase-ből
   async function fetchBookingsDown() {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode) return;
     try {
       const { data, error } = await sb.from("bookings").select("raw, ext_id").eq("salon_id", salonId);
       if (error) throw error;
       const downloaded = (data || []).map(r => r.raw).filter(Boolean);
       // MIGRÁCIÓ: ha a DB üres, de van helyi adat -> felküldjük, nem írjuk felül
-      if (downloaded.length === 0 && bookingsRef.current.length > 0) {
+      if (downloaded.length === 0 && bookingsRef.current.length > 0 && !bookingsLoadedRef.current) {
+        bookingsLoadedRef.current = true;
         await syncBookingsUp(bookingsRef.current);
         return;
       }
+      bookingsLoadedRef.current = true;
       // AUTOMATIKUS TÖRLÉS: a beállított napnál régebbi foglalásokat ne mutassuk,
       // és biztonságosan (konkrét ext_id-k alapján) töröljük a DB-ből is.
       let visible = downloaded;
@@ -405,18 +453,38 @@ function App() {
 
   // Amikor a foglalások változnak (és nem letöltésből) -> felküldjük
   React.useEffect(() => {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode) return;
     if (syncingRef.current) { syncingRef.current = false; return; }
     syncBookingsUp(bookings);
-  }, [bookings, salonId]);
+  }, [bookings, salonId, staffMode]);
 
-  // Induló betöltés + periodikus frissítés (12 mp)
+  // Induló betöltés + periodikus frissítés (12 mp) — csak belépett munkatársnak
   React.useEffect(() => {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode) return;
     fetchBookingsDown(); // induláskor
     const iv = setInterval(fetchBookingsDown, 12000);
     return () => clearInterval(iv);
-  }, [salonId]);
+  }, [salonId, staffMode]);
+
+  // Vendég mód: foglalt idősávok a szerver-függvényből (név/telefon nélkül)
+  async function fetchBusyDown() {
+    if (!sb || !salonId || staffMode) return;
+    try {
+      const from = formatDate(getToday());
+      const to = formatDate(addDays(getToday(), 120));
+      const { data, error } = await sb.rpc("cnf_busy_slots", { p_salon: salonId, p_from: from, p_to: to });
+      if (error) throw error;
+      setBusy(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Foglalt sávok letöltési hiba:", err);
+    }
+  }
+  React.useEffect(() => {
+    if (!sb || !salonId || staffMode) return;
+    fetchBusyDown();
+    const iv = setInterval(fetchBusyDown, 12000);
+    return () => clearInterval(iv);
+  }, [salonId, staffMode]);
 
   // ===== VENDÉGKARTON SZINKRON (3c lépés) =====
   const clientSyncingRef = React.useRef(false);
@@ -424,8 +492,10 @@ function App() {
   const clientsRef = React.useRef(clients);
   React.useEffect(() => { clientsRef.current = clients; }, [clients]);
 
+  const clientsLoadedRef = React.useRef(false);
+
   async function syncClientsUp(list) {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode || !clientsLoadedRef.current) return;
     try {
       if (list.length > 0) {
         const rows = list.map(c => ({
@@ -457,15 +527,17 @@ function App() {
   }
 
   async function fetchClientsDown() {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode) return;
     try {
       const { data, error } = await sb.from("clients").select("raw").eq("salon_id", salonId);
       if (error) throw error;
       const downloaded = (data || []).map(r => r.raw).filter(Boolean);
-      if (downloaded.length === 0 && clientsRef.current.length > 0) {
+      if (downloaded.length === 0 && clientsRef.current.length > 0 && !clientsLoadedRef.current) {
+        clientsLoadedRef.current = true;
         await syncClientsUp(clientsRef.current);
         return;
       }
+      clientsLoadedRef.current = true;
       clientSyncingRef.current = true;
       prevClientIdsRef.current = new Set(downloaded.map(c => String(c.id)));
       setClients(downloaded);
@@ -475,17 +547,17 @@ function App() {
   }
 
   React.useEffect(() => {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode) return;
     if (clientSyncingRef.current) { clientSyncingRef.current = false; return; }
     syncClientsUp(clients);
-  }, [clients, salonId]);
+  }, [clients, salonId, staffMode]);
 
   React.useEffect(() => {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode) return;
     fetchClientsDown();
     const iv = setInterval(fetchClientsDown, 12000);
     return () => clearInterval(iv);
-  }, [salonId]);
+  }, [salonId, staffMode]);
 
   // ===== BARBEREK SZINKRON =====
   const stylistSyncingRef = React.useRef(false);
@@ -493,8 +565,9 @@ function App() {
   const stylistsRef = React.useRef(stylists);
   React.useEffect(() => { stylistsRef.current = stylists; }, [stylists]);
 
+  const stylistsLoadedRef = React.useRef(false);
   async function syncStylistsUp(list) {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode || !stylistsLoadedRef.current) return;
     try {
       if (list.length > 0) {
         const rows = list.map((s, i) => ({
@@ -524,10 +597,12 @@ function App() {
       const { data, error } = await sb.from("stylists").select("raw").eq("salon_id", salonId).order("sort_order");
       if (error) throw error;
       const downloaded = (data || []).map(r => r.raw).filter(Boolean);
-      if (downloaded.length === 0 && stylistsRef.current.length > 0) {
+      if (downloaded.length === 0 && stylistsRef.current.length > 0 && !stylistsLoadedRef.current) {
+        stylistsLoadedRef.current = true;
         await syncStylistsUp(stylistsRef.current);
         return;
       }
+      stylistsLoadedRef.current = true;
       stylistSyncingRef.current = true;
       prevStylistIdsRef.current = new Set(downloaded.map(s => String(s.id)));
       setStylists(downloaded);
@@ -535,10 +610,10 @@ function App() {
   }
 
   React.useEffect(() => {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode) return;
     if (stylistSyncingRef.current) { stylistSyncingRef.current = false; return; }
     syncStylistsUp(stylists);
-  }, [stylists, salonId]);
+  }, [stylists, salonId, staffMode]);
 
   React.useEffect(() => {
     if (!sb || !salonId) return;
@@ -553,8 +628,9 @@ function App() {
   const servicesRef = React.useRef(services);
   React.useEffect(() => { servicesRef.current = services; }, [services]);
 
+  const servicesLoadedRef = React.useRef(false);
   async function syncServicesUp(list) {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode || !servicesLoadedRef.current) return;
     try {
       if (list.length > 0) {
         const rows = list.map((s, i) => ({
@@ -584,10 +660,12 @@ function App() {
       const { data, error } = await sb.from("services").select("raw").eq("salon_id", salonId).order("sort_order");
       if (error) throw error;
       const downloaded = (data || []).map(r => r.raw).filter(Boolean);
-      if (downloaded.length === 0 && servicesRef.current.length > 0) {
+      if (downloaded.length === 0 && servicesRef.current.length > 0 && !servicesLoadedRef.current) {
+        servicesLoadedRef.current = true;
         await syncServicesUp(servicesRef.current);
         return;
       }
+      servicesLoadedRef.current = true;
       serviceSyncingRef.current = true;
       prevServiceIdsRef.current = new Set(downloaded.map(s => String(s.id)));
       setServices(downloaded);
@@ -595,10 +673,10 @@ function App() {
   }
 
   React.useEffect(() => {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode) return;
     if (serviceSyncingRef.current) { serviceSyncingRef.current = false; return; }
     syncServicesUp(services);
-  }, [services, salonId]);
+  }, [services, salonId, staffMode]);
 
   React.useEffect(() => {
     if (!sb || !salonId) return;
@@ -613,8 +691,9 @@ function App() {
   const settingsRef = React.useRef(settings);
   React.useEffect(() => { settingsRef.current = settings; }, [settings]);
 
+  const settingsLoadedRef = React.useRef(false);
   async function syncSettingsUp(obj) {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode || !settingsLoadedRef.current) return;
     try {
       const { error } = await sb.from("salons")
         .update({ settings: obj, theme: obj.theme || "mono" })
@@ -631,21 +710,23 @@ function App() {
       const dl = data && data.settings;
       // Ha a DB-ben üres a settings, de van helyi -> felküldjük
       if ((!dl || Object.keys(dl).length === 0)) {
-        if (settingsRef.current && Object.keys(settingsRef.current).length > 0) {
+        if (settingsRef.current && Object.keys(settingsRef.current).length > 0 && !settingsLoadedRef.current) {
+          settingsLoadedRef.current = true;
           await syncSettingsUp(settingsRef.current);
         }
         return;
       }
+      settingsLoadedRef.current = true;
       settingsSyncingRef.current = true;
       setSettings(dl);
     } catch (err) { console.error("Beállítás szinkron (le) hiba:", err); }
   }
 
   React.useEffect(() => {
-    if (!sb || !salonId) return;
+    if (!sb || !salonId || !staffMode) return;
     if (settingsSyncingRef.current) { settingsSyncingRef.current = false; return; }
     syncSettingsUp(settings);
-  }, [settings, salonId]);
+  }, [settings, salonId, staffMode]);
 
   React.useEffect(() => {
     if (!sb || !salonId) return;
@@ -767,7 +848,9 @@ function App() {
     // Megnézzük, hogy az ÚJ foglalás bármelyik slotja ütközik-e meglévővel
     const newSlots = getBookingSlots(time, durationMinutes);
 
-    return !bookings.some(b => {
+    // Munkatársnak a teljes foglaláslista, vendégnek csak a foglalt sávok (busy)
+    const occupied = staffMode ? bookings : busy;
+    return !occupied.some(b => {
       if (excludeBookingId && b.id === excludeBookingId) return false;
       if (b.date !== dateStr || b.stylistId !== stylistId) return false;
       const existingSlots = getBookingSlots(b.time, b.duration || 15);
@@ -786,8 +869,47 @@ function App() {
     return { level: "ok", noShow, blocked: false };
   }
 
+  const [bookingBusy, setBookingBusy] = React.useState(false);
+
+  // Vendég foglalás: a szerver ellenőriz és ment (cnf_guest_book) — a vendég
+  // böngészője nem látja és nem írja közvetlenül a foglalási táblát.
+  async function handleGuestBook() {
+    if (bookingBusy) return;
+    if (!sb || !salonId) { showToast("Nincs kapcsolat a szerverrel, próbáld újra.", "error"); return; }
+    setBookingBusy(true);
+    try {
+      const { data, error } = await sb.rpc("cnf_guest_book", { p_salon: salonId, p: {
+        name: form.name, phone: form.phone, email: form.email, note: form.note || "",
+        date: selectedDate, time: form.time,
+        stylistId: String(form.stylist), serviceId: String(form.service),
+      }});
+      if (error) throw error;
+      if (!data || !data.ok) {
+        const msg = {
+          taken: "Ez az időpont közben elkelt. Válassz másikat!",
+          blocked: "❌ Online foglalás nem lehetséges. Kérjük, hívj minket telefonon.",
+          past: "Ez az időpont már elmúlt. Válassz másikat!",
+          unavailable: "Erre az időpontra nem lehet online foglalni. Válassz másikat!",
+          invalid: "Ellenőrizd a megadott adatokat (név, telefon, email).",
+        }[data && data.error] || "A foglalás nem sikerült, próbáld újra.";
+        showToast(msg, "error");
+        if (data && (data.error === "taken" || data.error === "unavailable")) { setForm(f => ({ ...f, time: "" })); fetchBusyDown(); }
+        return;
+      }
+      setBusy(prev => [...prev, data.booking]);
+      setBookingDone(true);
+      showToast("Foglalás rögzítve");
+    } catch (err) {
+      console.error("Foglalási hiba:", err);
+      showToast("A foglalás nem sikerült, próbáld újra.", "error");
+    } finally {
+      setBookingBusy(false);
+    }
+  }
+
   function handleBook() {
     if (!form.name || !form.phone || !form.email || !form.time || !form.stylist || !form.service) return;
+    if (!staffMode) { handleGuestBook(); return; }
 
     // Feketelista ellenőrzés
     const status = getClientStatus(form.phone);
@@ -864,13 +986,33 @@ function App() {
   }
 
   function rebookFromHistory(prev) {
-    setForm({ name: prev.clientName, phone: prev.clientPhone, email: clients.find(c=>c.phone===prev.clientPhone)?.email || "", service: prev.serviceId, stylist: prev.stylistId, time: "", note: "" });
+    // Vendég módban a szerver nem adja ki a teljes nevet és az emailt -> a vendég írja be
+    const phone = prev.clientPhone || lookupPhone;
+    setForm(f => ({ name: prev.clientName || f.name || "", phone, email: clients.find(c=>c.phone===phone)?.email || f.email || "", service: prev.serviceId, stylist: prev.stylistId, time: "", note: "" }));
     setLookupResult(null);
     setLookupPhone("");
     showToast("Adatok kitöltve!");
   }
 
-  function lookupClient() {
+  async function lookupClient() {
+    if (!staffMode) {
+      // Vendég mód: csak keresztnév, hűségpont és az utolsó 3 szolgáltatás jön vissza
+      if (!sb || !salonId) return;
+      try {
+        const { data, error } = await sb.rpc("cnf_guest_lookup", { p_salon: salonId, p_phone: lookupPhone });
+        if (error) throw error;
+        if (data) {
+          setLookupResult({ client: { name: data.firstName, points: data.points || 0 }, history: data.history || [] });
+        } else {
+          showToast("Nem található vendég", "error");
+          setLookupResult(null);
+        }
+      } catch (err) {
+        console.error("Vendégkeresési hiba:", err);
+        showToast("A keresés nem sikerült, próbáld újra.", "error");
+      }
+      return;
+    }
     const c = clients.find(cl => cl.phone === lookupPhone);
     if (c) {
       const history = bookings.filter(b => b.clientPhone === lookupPhone).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
@@ -971,11 +1113,13 @@ function App() {
       const existingSlots = getBookingSlots(b.time, b.duration || 30);
       return newSlots.some(s => existingSlots.includes(s));
     });
-    if (conflict) {
-      showToast("Foglalt!", "error"); setDragging(null); return;
-    }
     const stylist = stylists.find(s => s.id === stylistId);
-    if (settings.confirmMoves) {
+    // ADMIN/FODRÁSZ: dupla foglalás engedélyezett (rácsúsztatás meglévő foglalásra), de rákérdezünk.
+    // FONTOS: ez a függvény CSAK az admin naptárban fut. Az online (vendég) foglalásnál
+    // a vendég csak a SZABAD sávokból választhat, ezért vendég nem tud foglaltra foglalni.
+    if (conflict) {
+      if (!confirm(`⚠️ Erre az idősávra már van foglalás.\nRáteszed mégis (dupla foglalás)?\n\n${dragging.clientName}\n${dateStr} ${time} · ${stylist?.name || ""}`)) { setDragging(null); return; }
+    } else if (settings.confirmMoves) {
       if (!confirm(`Áthelyezed ide?\n\n${dragging.clientName}\n${dateStr} ${time} · ${stylist?.name}`)) { setDragging(null); return; }
     }
     setBookings(prev => prev.map(b => b.id === dragging.id ? {...b, date: dateStr, time, stylistId, stylist: stylist?.name || b.stylist} : b));
@@ -1116,6 +1260,7 @@ function App() {
   }
 
   function tryClientLogin() {
+    if (!CLIENT_ACCOUNTS_ENABLED) return;
     const client = clients.find(c => c.email === loginEmail && c.password === loginPassword);
     if (client) {
       setAuthRole("client");
@@ -1133,6 +1278,7 @@ function App() {
   }
 
   function registerClient() {
+    if (!CLIENT_ACCOUNTS_ENABLED) return;
     if (!registerForm.name || !registerForm.phone || !registerForm.email || !registerForm.password) {
       showToast("Tölts ki minden mezőt!", "error");
       return;
@@ -1342,7 +1488,7 @@ function App() {
               <button onClick={logout} style={{background:"none", border:"none", color:C.sub, cursor:"pointer", fontSize:"14px", padding:"2px 4px"}}>×</button>
             </div>
           )}
-          {!isClient && view === "book" && (
+          {CLIENT_ACCOUNTS_ENABLED && !isClient && view === "book" && (
             <button onClick={() => setShowClientLogin(true)} style={{...S.btnSec, fontSize:"11px", padding:"6px 12px"}}>
               👤 {T.login}
             </button>
@@ -1400,11 +1546,13 @@ function App() {
                   </div>
                 )}
 
+                {CLIENT_ACCOUNTS_ENABLED && (
                 <div style={{marginTop:"14px", paddingTop:"12px", borderTop:`1px solid ${C.border}`, display:"flex", gap:"6px", flexWrap:"wrap"}}>
                   <div style={{fontSize:"11px", color:C.textDim, flex:"1 1 100%", marginBottom:"4px"}}>{T.createAccount}</div>
                   <button onClick={() => setShowClientRegister(true)} style={{...S.btnSec, flex:1, fontSize:"11px"}}>{T.register}</button>
                   <button onClick={() => setShowClientLogin(true)} style={{...S.btnSec, flex:1, fontSize:"11px"}}>👤 {T.login}</button>
                 </div>
+                )}
               </div>
             )}
 
