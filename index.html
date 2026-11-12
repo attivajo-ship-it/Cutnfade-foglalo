@@ -396,6 +396,7 @@ function App() {
   const [toast, setToast] = React.useState(null);
   const [selectedBooking, setSelectedBooking] = React.useState(null);
   const [editingBooking, setEditingBooking] = React.useState(null);
+  const [editingBlock, setEditingBlock] = React.useState(null); // { stylistId, idx, date, from, to, reason }
   const [payingBooking, setPayingBooking] = React.useState(null);
   const [paymentForm, setPaymentForm] = React.useState({ method: "cash", discountType: "none", discountValue: "", finalPrice: 0 });
   const [selectedClient, setSelectedClient] = React.useState(null);
@@ -1234,13 +1235,18 @@ function App() {
     const svc = getStylistService(eb.stylistId, eb.serviceId);
     if (!stylist || !svc) { showToast("Hiányzó adat!", "error"); return; }
 
+    // Kézzel állított időtartam (admin/barber) — ha nincs, a szolgáltatásé
+    const orig = bookings.find(b => b.id === eb.id);
+    const dur = Math.max(15, Math.min(480, +eb.duration || svc.duration));
+    const serviceChanged = !orig || orig.serviceId !== eb.serviceId;
+
     // Ütközés-ellenőrzés (a saját magát kihagyva)
-        const conflict = bookings.some(b => {
+    const conflict = bookings.some(b => {
       if (b.id === eb.id) return false;
       if (b.date !== eb.date || b.stylistId !== eb.stylistId) return false;
-      return rangesOverlap(eb.time, svc.duration, b.time, b.duration || 30);
+      return rangesOverlap(eb.time, dur, b.time, b.duration || 30);
     });
-    if (conflict) { showToast("Ütközik egy másik foglalással!", "error"); return; }
+    if (conflict && !confirm("⚠️ Ez az időtartam átfed egy másik foglalással.\nMentsem így is (dupla foglalás)?")) return;
 
     // Munkaidő ellenőrzés
     if (!isSlotAvailable(eb.stylistId, eb.date, eb.time, svc.duration) &&
@@ -1255,9 +1261,9 @@ function App() {
       stylistId: eb.stylistId,
       stylist: stylist.name,
       serviceId: eb.serviceId,
-      service: svc.name,
-      price: svc.price,
-      duration: svc.duration,
+      service: serviceChanged ? svc.name : (b.service || svc.name),
+      price: serviceChanged ? svc.price : (b.price ?? svc.price),
+      duration: dur,
       note: eb.note,
     } : b));
     setEditingBooking(null);
@@ -1301,6 +1307,32 @@ function App() {
   }
 
   const dragOffsetRef = React.useRef(0);
+  // Foglalás nyújtása a kártya alsó szélének húzásával (admin/barber naptár)
+  const [resizePreview, setResizePreview] = React.useState(null); // { id, dur }
+  const justResizedRef = React.useRef(false);
+  function startResize(e, b) {
+    e.preventDefault(); e.stopPropagation();
+    const startY = e.clientY, startDur = b.duration || 30;
+    let cur = startDur;
+    const move = ev => {
+      const dy = ev.clientY - startY;
+      cur = Math.max(15, Math.min(480, Math.round((startDur + dy * 60 / 56) / 15) * 15));
+      setResizePreview({ id: b.id, dur: cur });
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      setResizePreview(null);
+      justResizedRef.current = true; setTimeout(() => { justResizedRef.current = false; }, 300);
+      if (cur === startDur) return;
+      const clash = bookings.some(x => x.id !== b.id && x.date === b.date && x.stylistId === b.stylistId && rangesOverlap(b.time, cur, x.time, x.duration || 30));
+      if (clash && !confirm(`⚠️ ${cur} percre nyújtva átfed egy másik foglalással.\nMentsem így is (dupla foglalás)?`)) return;
+      setBookings(prev => prev.map(x => x.id === b.id ? { ...x, duration: cur } : x));
+      showToast(`Időtartam: ${cur} perc`);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
   function onDragStart(e, booking) {
     // Hol fogták meg a blokkot (px a teteje alatt) — ennyivel kell feljebb tenni ejtéskor,
     // különben a blokk teteje a kurzorhoz ugrik és a foglalás lejjebb csúszik.
@@ -1419,7 +1451,9 @@ function App() {
     if (!st) return;
     const dur = +quickForm.blockDur || 60;
     const endMin = timeToMinutes(quickForm.time) + dur;
-    const to = `${String(Math.floor(endMin/60)).padStart(2,"0")}:${String(endMin%60).padStart(2,"0")}`;
+    const to = (quickForm.blockTo && timeToMinutes(quickForm.blockTo) > timeToMinutes(quickForm.time))
+      ? quickForm.blockTo
+      : `${String(Math.floor(endMin/60)).padStart(2,"0")}:${String(endMin%60).padStart(2,"0")}`;
     const block = { date: quickBooking.date, from: quickForm.time, to, reason: quickForm.blockReason || "" };
     saveStylist({...st, blocks: [...(st.blocks || []), block]});
     setQuickBooking(null);
@@ -2826,14 +2860,18 @@ function App() {
                               const heightPx = (durMin * 56 / 60);
                               const realIdx = (s.blocks || []).indexOf(bl);
                               return (
-                                <div key={`blk-${bli}`} style={{
-                                  position:"absolute", top:`${topPx}px`, left:"2px", right:"2px",
-                                  height:`${Math.max(heightPx-2, 16)}px`,
-                                  background:"repeating-linear-gradient(45deg, #5a5a5a, #5a5a5a 6px, #474747 6px, #474747 12px)",
-                                  border:"1px solid #6f6f6f", borderRadius:"3px", zIndex: 2, pointerEvents: dragging ? "none" : undefined,
+                                <div key={`blk-${bli}`} title="Kattints a szerkesztéshez"
+                                  onClick={(e) => { e.stopPropagation(); setEditingBlock({ stylistId: s.id, idx: realIdx, date: bl.date, from: bl.from, to: bl.to, reason: bl.reason || "" }); }}
+                                  style={{
+                                  position:"absolute", top:`${topPx}px`, left: C.isLight ? "4px" : "2px", right: C.isLight ? "4px" : "2px",
+                                  height:`${Math.max(heightPx-2, 16)}px`, cursor:"pointer",
+                                  background: C.isLight
+                                    ? "repeating-linear-gradient(45deg, #e9edeb, #e9edeb 6px, #dde3e0 6px, #dde3e0 12px)"
+                                    : "repeating-linear-gradient(45deg, #5a5a5a, #5a5a5a 6px, #474747 6px, #474747 12px)",
+                                  border: C.isLight ? `1px solid ${C.border}` : "1px solid #6f6f6f", borderRadius: C.isLight ? "8px" : "3px", zIndex: 2, pointerEvents: dragging ? "none" : undefined,
                                   display:"flex", alignItems:"center", justifyContent:"space-between", padding:"2px 6px", overflow:"hidden",
                                 }}>
-                                  <span style={{fontSize:"10px", fontWeight:"700", color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>⛔ {bl.reason || "Elfoglalt"} · {bl.from}–{bl.to}</span>
+                                  <span style={{fontSize:"10px", fontWeight:"700", color: C.isLight ? C.text : "#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>⛔ {bl.reason || "Elfoglalt"} · {bl.from}–{bl.to}</span>
                                   <button onClick={(e) => { e.stopPropagation(); if (confirm("Törlöd ezt az elfoglaltságot?")) saveStylist({...s, blocks: s.blocks.filter((_,j)=>j!==realIdx)}); }} style={{background:"rgba(0,0,0,0.45)", color:"#fff", border:"none", borderRadius:"3px", width:"18px", height:"18px", fontSize:"11px", cursor:"pointer", flexShrink:0, lineHeight:1, padding:0}}>✕</button>
                                 </div>
                               );
@@ -2843,12 +2881,13 @@ function App() {
                             {stylistBookings.map(b => {
                               const bMin = timeToMinutes(b.time);
                               const topPx = ((bMin - firstHour) * 56 / 60);
-                              const heightPx = ((b.duration || 30) * 56 / 60);
-                              const endMin = bMin + (b.duration || 30);
+                              const effDur = (resizePreview && resizePreview.id === b.id) ? resizePreview.dur : (b.duration || 30);
+                              const heightPx = (effDur * 56 / 60);
+                              const endMin = bMin + effDur;
                               const endTime = `${String(Math.floor(endMin/60)).padStart(2,"0")}:${String(endMin%60).padStart(2,"0")}`;
                               return (
                                 <div key={b.id}
-                                  onClick={(e) => { e.stopPropagation(); if (!touchDragging) setSelectedBooking(b); }}
+                                  onClick={(e) => { e.stopPropagation(); if (!touchDragging && !justResizedRef.current) setSelectedBooking(b); }}
                                   draggable
                                   onDragStart={(e) => { e.stopPropagation(); onDragStart(e, b); }}
                                   onDragEnd={() => { setDragging(null); setDragPreview(null); }}
@@ -2968,6 +3007,12 @@ function App() {
                                   </div>
                                   <div style={{fontSize: C.isLight ? "12.5px" : "10px", fontWeight: C.isLight ? "700" : "600", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{b.clientName}</div>
                                   <div style={{fontSize:"9px", opacity:0.8, fontWeight:"500", color: C.isLight ? C.sub : undefined, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{b.service}</div>
+                                  {/* Nyújtó fogantyú: húzd lefelé/felfelé az időtartam állításához */}
+                                  <div onMouseDown={(e) => startResize(e, b)} onClick={(e) => e.stopPropagation()} onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                    title="Húzd az időtartam állításához"
+                                    style={{position:"absolute", left:0, right:0, bottom:0, height:"8px", cursor:"ns-resize", display:"flex", justifyContent:"center", alignItems:"flex-end", paddingBottom:"1px"}}>
+                                    <span style={{width:"22px", height:"3px", borderRadius:"2px", background:"rgba(0,0,0,0.22)"}}></span>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -3730,6 +3775,7 @@ function App() {
                     time: selectedBooking.time,
                     stylistId: selectedBooking.stylistId,
                     serviceId: selectedBooking.serviceId,
+                    duration: selectedBooking.duration,
                     note: selectedBooking.note || "",
                   });
                   setSelectedBooking(null);
@@ -4024,17 +4070,21 @@ function App() {
             {quickForm.mode === "block" && (
               <>
                 <div style={{marginBottom:"10px"}}>
-                  <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Időtartam</div>
-                  <select style={S.input} value={quickForm.blockDur} onChange={e => setQuickForm({...quickForm, blockDur: +e.target.value})}>
-                    <option value={15}>15 perc</option>
-                    <option value={30}>30 perc</option>
-                    <option value={45}>45 perc</option>
-                    <option value={60}>1 óra</option>
-                    <option value={90}>1,5 óra</option>
-                    <option value={120}>2 óra</option>
-                    <option value={180}>3 óra</option>
-                    <option value={240}>4 óra</option>
-                  </select>
+                  <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Meddig tart?</div>
+                  {(() => {
+                    const startM = quickForm.time ? timeToMinutes(quickForm.time) : null;
+                    const defTo = startM != null ? (() => { const m = startM + (+quickForm.blockDur || 60); return `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`; })() : "";
+                    const toVal = quickForm.blockTo && startM != null && timeToMinutes(quickForm.blockTo) > startM ? quickForm.blockTo : defTo;
+                    return (
+                      <select style={S.input} value={toVal} disabled={startM == null} onChange={e => setQuickForm({...quickForm, blockTo: e.target.value})}>
+                        {startM == null && <option value="">— előbb válassz kezdő időpontot —</option>}
+                        {startM != null && HOURS_EXT.filter(h => timeToMinutes(h) > startM).map(h => {
+                          const d = timeToMinutes(h) - startM;
+                          return <option key={h} value={h}>{h} ({d >= 60 ? `${Math.floor(d/60)} ó${d%60 ? " " + (d%60) + " p" : ""}` : `${d} p`})</option>;
+                        })}
+                      </select>
+                    );
+                  })()}
                 </div>
                 <div style={{marginBottom:"12px"}}>
                   <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Megnevezés (nem kötelező)</div>
@@ -4320,11 +4370,70 @@ function App() {
         );
       })()}
 
+      {/* ELFOGLALTSÁG SZERKESZTÉSE (admin: bárkié, barber: a naptárban csak a sajátját látja) */}
+      {editingBlock && (() => {
+        const eb = editingBlock;
+        const st = stylists.find(x => x.id === eb.stylistId);
+        const fromM = timeToMinutes(eb.from);
+        const save = () => {
+          if (!st) return;
+          if (timeToMinutes(eb.to) <= fromM) { showToast("A vége legyen később, mint a kezdete!", "error"); return; }
+          const blocks = [...(st.blocks || [])];
+          if (!blocks[eb.idx]) { showToast("Ez az elfoglaltság közben megváltozott, nyisd meg újra.", "error"); setEditingBlock(null); return; }
+          blocks[eb.idx] = { ...blocks[eb.idx], from: eb.from, to: eb.to, reason: eb.reason };
+          saveStylist({ ...st, blocks });
+          setEditingBlock(null); showToast("Elfoglaltság módosítva");
+        };
+        const del = () => {
+          if (!st || !confirm("Törlöd ezt az elfoglaltságot?")) return;
+          saveStylist({ ...st, blocks: (st.blocks || []).filter((_, j) => j !== eb.idx) });
+          setEditingBlock(null); showToast("Elfoglaltság törölve");
+        };
+        return (
+          <div onClick={() => setEditingBlock(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1001}}>
+            <div onClick={e => e.stopPropagation()} style={{background:C.surface, borderRadius:"14px", padding:"20px", maxWidth:"380px", width:"100%", border:`1px solid ${C.border}`}}>
+              <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontSize:"22px", marginBottom:"2px"}}>⛔ Elfoglaltság</div>
+              <div style={{fontSize:"12px", color:C.accent, fontWeight:"700", marginBottom:"14px"}}>{st?.name} · {eb.date}</div>
+              <div className="qb-grid" style={{marginBottom:"10px"}}>
+                <div>
+                  <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Kezdete</div>
+                  <select style={S.input} value={eb.from} onChange={e => {
+                    const f = e.target.value; const len = timeToMinutes(eb.to) - fromM;
+                    const m = timeToMinutes(f) + Math.max(15, len);
+                    setEditingBlock({ ...eb, from: f, to: `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}` });
+                  }}>
+                    {HOURS_EXT.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Vége</div>
+                  <select style={S.input} value={eb.to} onChange={e => setEditingBlock({ ...eb, to: e.target.value })}>
+                    {HOURS_EXT.filter(h => timeToMinutes(h) > fromM).map(h => <option key={h} value={h}>{h}</option>)}
+                    {!HOURS_EXT.includes(eb.to) && <option value={eb.to}>{eb.to}</option>}
+                  </select>
+                </div>
+              </div>
+              <div style={{marginBottom:"14px"}}>
+                <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Megnevezés</div>
+                <input style={S.input} placeholder="pl. ebéd, intézkedés" value={eb.reason} onChange={e => setEditingBlock({ ...eb, reason: e.target.value })} />
+              </div>
+              <div style={{display:"flex", gap:"6px"}}>
+                <button style={{...S.btn, flex:1}} onClick={save}>Mentés</button>
+                <button style={S.btnDanger} onClick={del}>Törlés</button>
+                <button style={S.btnSec} onClick={() => setEditingBlock(null)}>Mégse</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* EDIT BOOKING MODAL */}
       {editingBooking && (() => {
         const eb = editingBooking;
         const stylistServices = getStylistServices(eb.stylistId);
         const currentSvc = getStylistService(eb.stylistId, eb.serviceId);
+        const ebDur = +eb.duration || currentSvc?.duration || 30;
+        const setDur = d => setEditingBooking({...eb, duration: Math.max(15, Math.min(480, d))});
         return (
           <div onClick={() => setEditingBooking(null)} style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", padding:"20px", zIndex:1001}}>
             <div onClick={e=>e.stopPropagation()} style={{background:C.surface, borderRadius:"10px", padding:"24px", maxWidth:"400px", width:"100%", maxHeight:"85vh", overflowY:"auto", border:`1px solid ${C.border}`}}>
@@ -4345,7 +4454,11 @@ function App() {
 
               <div style={{marginBottom:"10px"}}>
                 <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Szolgáltatás</div>
-                <select style={S.input} value={eb.serviceId} onChange={e => setEditingBooking({...eb, serviceId: +e.target.value})}>
+                <select style={S.input} value={eb.serviceId} onChange={e => {
+                  const sid = +e.target.value;
+                  const sv = getStylistService(eb.stylistId, sid);
+                  setEditingBooking({...eb, serviceId: sid, duration: sv?.duration || eb.duration});
+                }}>
                   {stylistServices.map(s => <option key={s.id} value={s.id}>{s.name} – {s.price.toLocaleString()} Ft ({s.duration}p)</option>)}
                 </select>
               </div>
@@ -4359,8 +4472,8 @@ function App() {
                   <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Időpont</div>
                   <select style={S.input} value={eb.time} onChange={e => setEditingBooking({...eb, time: e.target.value})}>
                     {HOURS_EXT.map(h => {
-                      const avail = isSlotAvailable(eb.stylistId, eb.date, h, currentSvc?.duration || 30, eb.id, true) || h === eb.time;
-                      const inHours = isSlotAvailable(eb.stylistId, eb.date, h, currentSvc?.duration || 30, eb.id, false);
+                      const avail = isSlotAvailable(eb.stylistId, eb.date, h, ebDur, eb.id, true) || h === eb.time;
+                      const inHours = isSlotAvailable(eb.stylistId, eb.date, h, ebDur, eb.id, false);
                       return <option key={h} value={h} disabled={!avail}>{h}{!avail ? " (foglalt)" : !inHours ? " ⚠" : ""}</option>;
                     })}
                   </select>
@@ -4379,6 +4492,19 @@ function App() {
                   const idx = HOURS_EXT.indexOf(eb.time);
                   if (idx < HOURS_EXT.length-1) setEditingBooking({...eb, time: HOURS_EXT[idx+1]});
                 }}>+ 15p</button>
+              </div>
+
+              {/* Időtartam — csak admin/barber látja ezt az ablakot */}
+              <div style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"10px", padding:"10px", background:C.surfaceAlt, borderRadius:"6px", flexWrap:"wrap"}}>
+                <span style={{fontSize:"11px", color:C.sub, flex:1, minWidth:"90px"}}>Időtartam:</span>
+                <button style={{...S.btnSec, padding:"8px 14px", fontSize:"15px", fontWeight:"700"}} onClick={() => setDur(ebDur - 15)}>− 15p</button>
+                <span style={{fontSize:"16px", fontWeight:"700", minWidth:"64px", textAlign:"center"}}>{ebDur} perc</span>
+                <button style={{...S.btnSec, padding:"8px 14px", fontSize:"15px", fontWeight:"700"}} onClick={() => setDur(ebDur + 15)}>+ 15p</button>
+                {currentSvc && ebDur !== currentSvc.duration && (
+                  <button onClick={() => setDur(currentSvc.duration)} style={{flexBasis:"100%", background:"none", border:"none", color:C.accent, fontSize:"11px", fontWeight:"700", cursor:"pointer", textAlign:"right", padding:0, fontFamily:"inherit"}}>
+                    ↺ vissza a szolgáltatás idejére ({currentSvc.duration} perc)
+                  </button>
+                )}
               </div>
 
               <div style={{marginBottom:"16px"}}>
