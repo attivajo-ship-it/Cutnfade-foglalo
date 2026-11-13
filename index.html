@@ -4062,30 +4062,63 @@ function App() {
               <button onClick={() => setQuickForm({...quickForm, mode: "dayoff"})} style={{flex:1, padding:"8px 4px", borderRadius:"6px", border:`1px solid ${quickForm.mode === "dayoff" ? C.accent : C.border}`, background: quickForm.mode === "dayoff" ? C.accent+"22" : "transparent", color: C.text, cursor:"pointer", fontSize:"11px", fontWeight:"700"}}>🏖 Szabadnap</button>
             </div>
 
-            <div className="qb-grid" style={{marginBottom:"10px"}}>
-            <div>
+            <div style={{marginBottom:"10px"}}>
               <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Barber</div>
               <select style={S.input} value={quickBooking.stylistId} onChange={e => setQuickBooking({...quickBooking, stylistId: +e.target.value})}>
                 {stylists.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
 
-            {quickForm.mode !== "dayoff" && (
-            <div>
-              <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Időpont <span style={{color:C.muted}}>(munkaidőn kívül is)</span></div>
-              <select style={S.input} value={quickForm.time} onChange={e => setQuickForm({...quickForm, time: e.target.value})}>
-                <option value="">-- Válassz időpontot --</option>
-                {HOURS_EXT.map(h => {
-                  const selSvcs = (quickForm.serviceIds || [quickForm.serviceId]).map(id => getStylistService(quickBooking.stylistId, id)).filter(Boolean);
-                  const totalDur = selSvcs.reduce((s,x)=>s+x.duration, 0) || 30;
-                  const free = isSlotAvailable(quickBooking.stylistId, quickBooking.date, h, totalDur, null, true);
-                  const inHours = isSlotAvailable(quickBooking.stylistId, quickBooking.date, h, totalDur, null, false);
-                  return <option key={h} value={h} disabled={!free}>{h}{!free ? " (foglalt)" : !inHours ? " ⚠ munkaidőn kívül" : ""}</option>;
-                })}
-              </select>
-            </div>
-            )}
-            </div>
+            {/* IDŐPONT-RÁCS: szabad / foglalt / kiválasztott; a munkaidőn kívüliek kinyitható rész mögött */}
+            {quickForm.mode !== "dayoff" && (() => {
+              const sid = quickBooking.stylistId, date = quickBooking.date;
+              const selSvcs = (quickForm.serviceIds || [quickForm.serviceId]).map(id => getStylistService(sid, id)).filter(Boolean);
+              const totalDur = quickForm.mode === "block" ? 15 : (selSvcs.reduce((a,x)=>a+x.duration, 0) || 30);
+              const hrs = getStylistHours(sid, date);
+              const works = isStylistWorking(sid, date) && hrs && !hrs.off;
+              const inHours = h => works && h >= hrs.open && h < hrs.close;
+              const slots = HOURS_EXT.map(h => ({ h, free: isSlotAvailable(sid, date, h, totalDur, null, true), inside: inHours(h) }));
+              const inside = slots.filter(x => x.inside), outside = slots.filter(x => !x.inside);
+              const selOutside = quickForm.time && outside.some(x => x.h === quickForm.time);
+              const showOff = quickForm.showOff || selOutside || inside.length === 0;
+              const cell = ({ h, free }) => {
+                const active = quickForm.time === h;
+                return (
+                  <button key={h} disabled={!free} aria-pressed={active} title={free ? "" : "Foglalt"}
+                    onClick={() => setQuickForm({...quickForm, time: h})}
+                    style={{padding:"9px 2px", borderRadius:"8px", fontSize:"13px", fontFamily:"inherit", fontWeight: active ? "700" : "600",
+                      cursor: free ? "pointer" : "not-allowed",
+                      border: `1px solid ${active ? C.accent : free ? C.border : (C.isLight ? "#ecd9a8" : C.border)}`,
+                      background: active ? C.accent : free ? C.surface : (C.isLight ? "#fbf1d9" : C.surfaceAlt),
+                      color: active ? C.accentText : free ? C.text : (C.isLight ? "#8a7440" : C.muted)}}>
+                    {h}
+                  </button>
+                );
+              };
+              const grid = { display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(62px, 1fr))", gap:"6px" };
+              const dot = (bg, bd) => <span style={{display:"inline-block", width:"11px", height:"11px", borderRadius:"3px", background:bg, border:`1px solid ${bd}`, marginRight:"4px", verticalAlign:"-1px"}}></span>;
+              return (
+                <div style={{marginBottom:"12px"}}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:"6px"}}>
+                    <span style={{fontSize:"11px", color:C.sub}}>Időpont{quickForm.mode !== "block" ? ` · ${totalDur} perc` : ""}</span>
+                    <span style={{fontSize:"13px", fontWeight:"700", color: quickForm.time ? C.accent : C.muted}}>{quickForm.time || "nincs kiválasztva"}</span>
+                  </div>
+                  {inside.length > 0
+                    ? <div style={grid}>{inside.map(cell)}</div>
+                    : <div style={{fontSize:"12px", color:C.sub, padding:"4px 0 8px"}}>Ezen a napon a barber nem dolgozik — munkaidőn kívüli időpontot választhatsz.</div>}
+                  <button onClick={() => setQuickForm({...quickForm, showOff: !showOff})}
+                    style={{background:"none", border:"none", color:C.text, fontWeight:"700", fontSize:"12px", cursor:"pointer", padding:"10px 0 6px", fontFamily:"inherit"}}>
+                    {showOff ? "▾" : "▸"} Munkaidőn kívüli időpontok ({outside.length})
+                  </button>
+                  {showOff && <div style={grid}>{outside.map(cell)}</div>}
+                  <div style={{fontSize:"11px", color:C.sub, marginTop:"8px", display:"flex", gap:"12px", flexWrap:"wrap"}}>
+                    <span>{dot(C.surface, C.border)}Szabad</span>
+                    <span>{dot(C.isLight ? "#fbf1d9" : C.surfaceAlt, C.isLight ? "#ecd9a8" : C.border)}Foglalt</span>
+                    <span>{dot(C.accent, C.accent)}Kiválasztva</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* SZABADNAP mód */}
             {quickForm.mode === "dayoff" && (
