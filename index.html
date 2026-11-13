@@ -397,6 +397,7 @@ function App() {
   const [selectedBooking, setSelectedBooking] = React.useState(null);
   const [editingBooking, setEditingBooking] = React.useState(null);
   const [editingBlock, setEditingBlock] = React.useState(null); // { stylistId, idx, date, from, to, reason }
+  const [showLegend, setShowLegend] = React.useState(false);
   const [payingBooking, setPayingBooking] = React.useState(null);
   const [paymentForm, setPaymentForm] = React.useState({ method: "cash", discountType: "none", discountValue: "", finalPrice: 0 });
   const [selectedClient, setSelectedClient] = React.useState(null);
@@ -2616,7 +2617,38 @@ function App() {
                   </div>
                 )}
 
-                <div style={{fontSize:"10px", color:C.sub, marginBottom:"10px", letterSpacing:"0.05em"}}>💡 Foglalásra kattintva részletek · A "+" gombokkal új foglalás barberenként</div>
+                <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", flexWrap:"wrap", marginBottom:"10px"}}>
+                  <div style={{fontSize:"10px", color:C.sub, letterSpacing:"0.05em"}}>💡 Foglalásra kattintva részletek · A "+" gombokkal új foglalás barberenként</div>
+                  <button onClick={() => setShowLegend(v => !v)} aria-expanded={showLegend}
+                    style={{...S.btnSec, padding:"6px 12px", fontSize:"11px", borderRadius:"999px", background: showLegend ? C.surfaceAlt : "transparent"}}>ⓘ Jelmagyarázat</button>
+                </div>
+                {showLegend && (() => {
+                  const sw = (st) => <span style={{display:"inline-block", width:"30px", height:"16px", borderRadius:"4px", flexShrink:0, ...st}}></span>;
+                  const row = (swatch, text) => <div style={{display:"flex", alignItems:"center", gap:"10px", fontSize:"12px", padding:"3px 0"}}>{swatch}<span>{text}</span></div>;
+                  const head = (t) => <div style={{fontSize:"10px", fontWeight:"700", letterSpacing:"0.12em", color:C.sub, margin:"8px 0 4px"}}>{t}</div>;
+                  const L = C.isLight;
+                  return (
+                    <div style={{marginBottom:"12px", padding:"10px 14px 12px", background:C.surface, border:`1px solid ${C.border}`, borderRadius:"10px", display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))", columnGap:"24px"}}>
+                      <div>
+                        {head("FOGLALÁSOK")}
+                        {row(sw({background: L ? "color-mix(in srgb, #c8e6c8 55%, #fff)" : "#f4a89f", borderLeft: L ? "5px solid #6f8f6f" : undefined, border: L ? undefined : "1px solid rgba(0,0,0,0.2)"}), "Foglalás — a kártya színe a barber színe")}
+                        {row(<span style={{width:"30px", textAlign:"center", color:C.success, fontWeight:"700", flexShrink:0}}>✓</span>, "Teljesítve (kifizetve)")}
+                        {row(sw({background: L ? "#fdecea" : "#dc4a3d", borderLeft: L ? `5px solid ${C.danger}` : undefined}), "✗ Nem jelent meg")}
+                        {row(<span style={{width:"30px", textAlign:"center", flexShrink:0}}>📞</span>, "Telefonos / helyszíni foglalás (a szalon vette fel)")}
+                        {row(<span style={{width:"30px", textAlign:"center", flexShrink:0}}>🌐</span>, "Online foglalás (a vendég foglalta)")}
+                      </div>
+                      <div>
+                        {head("MUNKAIDŐ ÉS ELFOGLALTSÁG")}
+                        {row(sw({background: L ? "#ffffff" : "#b8dfe0", border:`1px solid ${C.border}`}), L ? "Munkaidő" : "Munkaidő (a barber színével)")}
+                        {row(sw({background: L ? "#f0f3f1" : C.border, border:`1px solid ${C.border}`}), "Munkaidőn kívül")}
+                        {row(sw({background: L ? "repeating-linear-gradient(45deg, #ffffff, #ffffff 4px, #e3e8e5 4px, #e3e8e5 8px)" : "repeating-linear-gradient(45deg, #b8dfe0, #b8dfe0 4px, #b8dfe055 4px, #b8dfe055 8px)", border:`1px solid ${C.border}`}), "Dolgozik, de az online foglalás zárva")}
+                        {row(sw({background: L ? "repeating-linear-gradient(45deg, #e9edeb, #e9edeb 4px, #cfd6d2 4px, #cfd6d2 8px)" : "repeating-linear-gradient(45deg, #5a5a5a, #5a5a5a 4px, #474747 4px, #474747 8px)", border:`1px solid ${C.border}`}), "⛔ Elfoglaltság (pl. ebéd) — kattintva szerkeszthető")}
+                        {row(<span style={{display:"inline-block", width:"30px", height:"2px", background:"#ef4444", flexShrink:0}}></span>, "A mostani időpont")}
+                        {row(<span style={{display:"inline-block", width:"30px", flexShrink:0, textAlign:"center"}}><span style={{display:"inline-block", width:"20px", height:"3px", borderRadius:"2px", background:"rgba(0,0,0,0.3)"}}></span></span>, "A kártya alsó szélét húzva az időtartam állítható")}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {calView === "day" && (
                 <div className="scroll-x" style={{maxHeight:"65vh", overflowY:"auto", overflowX:"auto", WebkitOverflowScrolling:"touch"}}>
@@ -3001,7 +3033,7 @@ function App() {
                                     touchAction: "none",
                                   }}>
                                   <div style={{fontSize: C.isLight ? "11px" : "10px", fontWeight:"700", color: C.isLight ? C.sub : undefined, display:"flex", justifyContent:"space-between", gap:"4px"}}>
-                                    <span>{b.time} – {endTime}</span>
+                                    <span style={{whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{b.time} – {endTime} <span title={b.source === "online" ? "Online foglalás" : "Telefonos / helyszíni foglalás"} style={{fontSize:"9px"}}>{b.source === "online" ? "🌐" : "📞"}</span></span>
                                     {C.isLight && b.status === "completed" && <span style={{color:C.success}} title="Teljesítve">✓</span>}
                                     {C.isLight && b.status === "noshow" && <span style={{color:C.danger}} title="Nem jelent meg">✗</span>}
                                   </div>
