@@ -1288,51 +1288,12 @@ function App() {
     }
   }
 
+  // A foglaló oldalon MINDIG a szerveres vendégút fut (ellenőrzés + email), akkor is, ha a böngészőben
+  // munkatárs van belépve. A régi helyi mentés (staffMode-ban) email nélkül mentett és levelet sem küldött,
+  // mégis "Visszaigazoló email elküldve"-t írt ki (2026-11-14). Munkatársi foglalás: admin gyors foglalás.
   function handleBook() {
     if (!form.name || !form.phone || !form.email || !form.time || !form.stylist || !form.service) return;
-    if (!staffMode) { handleGuestBook(); return; }
-
-    // Feketelista ellenőrzés
-    const status = getClientStatus(form.phone);
-    if (status.blocked) {
-      showToast(`❌ Foglalás nem lehetséges. Vedd fel velünk a kapcsolatot.`, "error");
-      return;
-    }
-
-    const actualStylistId = form.stylist;
-    const stylist = stylists.find(s => s.id === actualStylistId);
-    if (!stylist) return;
-
-    // Borbély-specifikus szolgáltatás (egyéni ár/idő)
-    const svc = getStylistService(actualStylistId, form.service);
-    if (!svc) return;
-
-    const id = Date.now();
-    let existingClient = clients.find(c => c.phone === form.phone);
-    if (!existingClient) {
-      setClients(prev => [...prev, { id: id+"c", name: form.name, phone: form.phone, email: form.email, since: formatDate(today), points: 0, internalNotes: "", noShowCount: 0 }]);
-    }
-
-    setBookings(prev => [...prev, {
-      id, clientName: form.name, clientPhone: form.phone,
-      service: svc.name, serviceId: form.service,
-      stylist: stylist.name, stylistId: actualStylistId,
-      date: selectedDate, time: form.time,
-      price: svc.price, duration: svc.duration,
-      status: "confirmed", paymentMethod: null,
-      note: form.note,
-    }]);
-
-    if (settings.notifyEnabled) {
-      const emailData = makeEmail("confirmation", {
-        clientName: form.name, clientEmail: form.email, clientPhone: form.phone,
-        date: selectedDate, time: form.time, service: svc.name, stylist: stylist.name, price: svc.price,
-      });
-      setNotifications(prev => [{ id: Date.now()+"n", type: "confirmation", ...emailData, time: new Date().toISOString(), read: false }, ...prev].slice(0, 50));
-    }
-
-    setBookingDone(true);
-    showToast("Foglalás rögzítve · Visszaigazoló email elküldve");
+    handleGuestBook();
   }
 
   // === EMAIL SABLONOK ===
