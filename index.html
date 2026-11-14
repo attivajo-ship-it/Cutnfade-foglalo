@@ -72,6 +72,8 @@ const TRANSLATIONS = {
     blacklistMsg: "Több elmaradt időpont miatt online foglalásod blokkolva van. Kérjük hívj telefonon.",
     depositTitle: "⚠ ELŐLEG KÖTELEZŐ",
     closedDay: "Zárva", weekdays: ["Vas","Hét","Kedd","Sze","Csü","Pén","Szo"],
+    months: ["január","február","március","április","május","június","július","augusztus","szeptember","október","november","december"],
+    monthView: "Naptár", weekView: "Hét", freeDay: "foglalható nap",
   },
   en: {
     book: "Booking", admin: "Admin", login: "Sign in",
@@ -97,6 +99,8 @@ const TRANSLATIONS = {
     blacklistMsg: "Due to multiple missed appointments, your online booking is blocked. Please call us.",
     depositTitle: "⚠ DEPOSIT REQUIRED",
     closedDay: "Closed", weekdays: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],
+    months: ["January","February","March","April","May","June","July","August","September","October","November","December"],
+    monthView: "Calendar", weekView: "Week", freeDay: "bookable day",
   },
 };
 
@@ -440,6 +444,8 @@ function App() {
 
   const [selectedDate, setSelectedDate] = React.useState(formatDate(today));
   const [calOffset, setCalOffset] = React.useState(0);
+  const [guestCalOpen, setGuestCalOpen] = React.useState(false);   // vendég oldal: havi naptár nézet
+  const [guestMonth, setGuestMonth] = React.useState(() => { const t = getToday(); return new Date(t.getFullYear(), t.getMonth(), 1); });
   const [adminWeekOffset, setAdminWeekOffset] = React.useState(0);
   const [calendarView, setCalendarView] = React.useState("day"); // day | week
   const [adminDate, setAdminDate] = React.useState(formatDate(today));
@@ -2147,39 +2153,121 @@ function App() {
             })()}
 
             {/* Naptár */}
-            <div style={S.card}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"14px"}}>
-                <span style={S.label}>{T.chooseDay}</span>
-                <div style={{display:"flex", gap:"4px"}}>
-                  <button style={S.btnIcon} onClick={() => setCalOffset(o=>o-1)}>‹</button>
-                  <button style={S.btnIcon} onClick={() => setCalOffset(o=>o+1)}>›</button>
-                </div>
-              </div>
-              <div className="scroll-x" style={{display:"flex", gap:"6px"}}>
-                {weekDays.map(d => {
-                  const ds = formatDate(d);
-                  const isPast = d < today;
-                  const isSel = ds === selectedDate;
-                  // Zárva: aznap senki nem dolgozik. Nem választható: senkihez nem lehet online foglalni
-                  // (zárva, vagy a heti alap szerinti nap még az előfoglalási ablakon túl van).
-                  const isClosed = !stylists.some(s => isStylistWorking(s.id, ds));
-                  const disabled = isPast || isClosed || !stylists.some(s => isStylistWorking(s.id, ds) && isWithinBookingWindow(s, ds));
-                  return (
-                    <button key={ds} disabled={disabled}
-                      onClick={() => setSelectedDate(ds)}
-                      style={{minWidth:"58px", padding:"12px 4px", borderRadius:"6px",
-                        background: isSel ? C.accent : "transparent",
-                        color: isSel ? C.accentText : disabled ? C.muted : C.text,
-                        border: isSel ? "none" : `1px solid ${C.border}`,
-                        cursor: disabled ? "default" : "pointer", textAlign:"center"}}>
-                      <div style={{fontSize:"9px", opacity:0.7, fontWeight:"600", letterSpacing:"0.1em"}}>{T.weekdays[d.getDay()]}</div>
-                      <div style={{fontSize:"20px", fontWeight:"700", marginTop:"2px"}}>{d.getDate()}</div>
-                      {isClosed && !isPast && <div style={{fontSize:"8px", marginTop:"2px", color: isSel ? C.accentText : C.muted}}>{T.closedDay.toUpperCase()}</div>}
+            {(() => {
+              // Egy nap állapota a vendég szemszögéből
+              const dayState = ds => {
+                const isPast = ds < formatDate(today);
+                // Zárva: aznap senki nem dolgozik. Nem választható: senkihez nem lehet online foglalni.
+                const isClosed = !stylists.some(s => isStylistWorking(s.id, ds));
+                const disabled = isPast || isClosed || !stylists.some(s => isStylistWorking(s.id, ds) && isWithinBookingWindow(s, ds));
+                return { isPast, isClosed, disabled };
+              };
+              const monthName = d => lang === "hu" ? `${d.getFullYear()}. ${T.months[d.getMonth()]}` : `${T.months[d.getMonth()]} ${d.getFullYear()}`;
+              // A hét fejléce: "2026. december" vagy "2026. november – december"
+              const wFirst = weekDays[0], wLast = weekDays[weekDays.length - 1];
+              const weekLabel = wFirst.getMonth() === wLast.getMonth() ? monthName(wFirst)
+                : wFirst.getFullYear() === wLast.getFullYear()
+                  ? (lang === "hu" ? `${wFirst.getFullYear()}. ${T.months[wFirst.getMonth()]} – ${T.months[wLast.getMonth()]}` : `${T.months[wFirst.getMonth()]} – ${T.months[wLast.getMonth()]} ${wLast.getFullYear()}`)
+                  : `${monthName(wFirst)} – ${monthName(wLast)}`;
+              // Havi nézetből kiválasztott nap: a heti sáv is ugorjon arra a hétre
+              const pickFromMonth = ds => {
+                setSelectedDate(ds);
+                setCalOffset(Math.floor(Math.round((parseDate(ds) - today) / 86400000) / 7));
+                setGuestCalOpen(false);
+              };
+              const openMonth = () => {
+                const base = selectedDate ? parseDate(selectedDate) : weekDays[0];
+                setGuestMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+                setGuestCalOpen(true);
+              };
+              const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+              const gy = guestMonth.getFullYear(), gm = guestMonth.getMonth();
+              const cells = [];
+              const lead = (new Date(gy, gm, 1).getDay() + 6) % 7;
+              for (let i = 0; i < lead; i++) cells.push(null);
+              for (let d = 1, n = new Date(gy, gm + 1, 0).getDate(); d <= n; d++) cells.push(formatDate(new Date(gy, gm, d)));
+              const toggleBtn = { ...S.btnSec, padding:"6px 10px", fontSize:"11px", display:"inline-flex", alignItems:"center", gap:"4px" };
+
+              return (
+                <div style={S.card}>
+                  <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px", gap:"8px"}}>
+                    <span style={{...S.label, marginBottom:0}}>{T.chooseDay}</span>
+                    <button style={toggleBtn} onClick={() => guestCalOpen ? setGuestCalOpen(false) : openMonth()} aria-pressed={guestCalOpen}>
+                      {guestCalOpen ? `▤ ${T.weekView}` : `📅 ${T.monthView}`}
                     </button>
-                  );
-                })}
-              </div>
-            </div>
+                  </div>
+
+                  {!guestCalOpen ? (
+                    <>
+                      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px"}}>
+                        <div style={{fontSize:"14px", fontWeight:"700", color:C.text}}>{weekLabel}</div>
+                        <div style={{display:"flex", gap:"4px"}}>
+                          <button style={S.btnIcon} onClick={() => setCalOffset(o=>o-1)} aria-label="‹">‹</button>
+                          <button style={S.btnIcon} onClick={() => setCalOffset(o=>o+1)} aria-label="›">›</button>
+                        </div>
+                      </div>
+                      <div className="scroll-x" style={{display:"flex", gap:"6px"}}>
+                        {weekDays.map(d => {
+                          const ds = formatDate(d);
+                          const { isPast, isClosed, disabled } = dayState(ds);
+                          const isSel = ds === selectedDate;
+                          return (
+                            <button key={ds} disabled={disabled}
+                              onClick={() => setSelectedDate(ds)}
+                              style={{minWidth:"58px", padding:"12px 4px", borderRadius:"6px",
+                                background: isSel ? C.accent : "transparent",
+                                color: isSel ? C.accentText : disabled ? C.muted : C.text,
+                                border: isSel ? "none" : `1px solid ${C.border}`,
+                                cursor: disabled ? "default" : "pointer", textAlign:"center"}}>
+                              <div style={{fontSize:"9px", opacity:0.7, fontWeight:"600", letterSpacing:"0.1em"}}>{T.weekdays[d.getDay()]}</div>
+                              <div style={{fontSize:"20px", fontWeight:"700", marginTop:"2px"}}>{d.getDate()}</div>
+                              {isClosed && !isPast && <div style={{fontSize:"8px", marginTop:"2px", color: isSel ? C.accentText : C.muted}}>{T.closedDay.toUpperCase()}</div>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px"}}>
+                        <div style={{fontSize:"14px", fontWeight:"700", color:C.text}}>{monthName(guestMonth)}</div>
+                        <div style={{display:"flex", gap:"4px"}}>
+                          <button style={{...S.btnIcon, opacity: guestMonth <= thisMonth ? 0.3 : 1}} disabled={guestMonth <= thisMonth}
+                            onClick={() => setGuestMonth(new Date(gy, gm - 1, 1))} aria-label="‹">‹</button>
+                          <button style={S.btnIcon} onClick={() => setGuestMonth(new Date(gy, gm + 1, 1))} aria-label="›">›</button>
+                        </div>
+                      </div>
+                      <div style={{display:"grid", gridTemplateColumns:"repeat(7, minmax(0, 1fr))", gap:"4px", maxWidth:"440px"}}>
+                        {[1,2,3,4,5,6,0].map(w => (
+                          <div key={w} style={{textAlign:"center", fontSize:"10px", fontWeight:"700", color:C.sub, padding:"2px 0"}}>{T.weekdays[w]}</div>
+                        ))}
+                        {cells.map((ds, i) => {
+                          if (!ds) return <div key={"e" + i} />;
+                          const { disabled } = dayState(ds);
+                          const isSel = ds === selectedDate;
+                          const isToday = ds === formatDate(today);
+                          return (
+                            <button key={ds} disabled={disabled} onClick={() => pickFromMonth(ds)}
+                              style={{aspectRatio:"1 / 1", minHeight:"38px", borderRadius:"8px", fontFamily:"inherit",
+                                display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"1px",
+                                background: isSel ? C.accent : disabled ? "transparent" : C.surface,
+                                color: isSel ? C.accentText : disabled ? C.muted : C.text,
+                                border: isSel ? `1px solid ${C.accent}` : `1px solid ${disabled ? "transparent" : C.border}`,
+                                opacity: disabled ? 0.55 : 1, cursor: disabled ? "default" : "pointer"}}>
+                              <span style={{fontSize:"15px", fontWeight: isToday ? "800" : "600", textDecoration: isToday ? "underline" : "none"}}>{Number(ds.slice(8))}</span>
+                              {!disabled && <span style={{width:"5px", height:"5px", borderRadius:"50%", background: isSel ? C.accentText : C.accent}} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{display:"flex", alignItems:"center", gap:"6px", fontSize:"11px", color:C.sub, marginTop:"8px"}}>
+                        <span style={{width:"6px", height:"6px", borderRadius:"50%", background:C.accent, display:"inline-block"}} /> {T.freeDay}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Barber - ELŐSZÖR */}
             <div style={S.card}>
