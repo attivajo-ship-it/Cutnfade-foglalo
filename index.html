@@ -188,21 +188,24 @@ const EMPTY_HOURS = {
   sun: { open: "09:00", close: "18:00", off: true },
 };
 
-// Egy barber adott napi munkaideje. A napra szóló beállítás (stylist.dayHours["YYYY-MM-DD"] =
-// {open, close} vagy {off:true}) felülírja a heti munkaidőt. A szabadság ettől függetlenül zár.
+// Egy barber adott napi munkaideje. 2026-11-14 óta CSAK a naptárban megnyitott napok számítanak:
+// stylist.dayHours["YYYY-MM-DD"] = {open, close}. Ami nincs benne, az zárva (online nem foglalható).
+// A régi heti munkaidő (stylist.hours) már nem befolyásol semmit. A szabadság (vacation) külön zár.
 function stylistDayHours(stylist, dateStr) {
   const o = stylist?.dayHours?.[dateStr];
-  if (o) return o.off ? { open: o.open || "09:00", close: o.close || "18:00", off: true, custom: true } : { open: o.open, close: o.close, off: false, custom: true };
-  return stylist?.hours?.[WEEKDAY_KEYS[parseDate(dateStr).getDay()]];
+  if (o && !o.off && o.open && o.close) return { open: o.open, close: o.close, off: false };
+  return { open: "09:00", close: "18:00", off: true };
 }
 
 const HU_MONTHS = ["január","február","március","április","május","június","július","augusztus","szeptember","október","november","december"];
 const fmtHour = t => { const [h, m] = (t || "0:0").split(":").map(Number); return m ? `${h}:${String(m).padStart(2,"0")}` : String(h); };
 const fmtHours = mins => { const h = mins / 60; return (Math.round(h * 10) / 10).toString().replace(".", ","); };
 const spanMinutes = (a, b) => { const [ah, am] = a.split(":").map(Number); const [bh, bm] = b.split(":").map(Number); return Math.max(0, (bh*60+bm) - (ah*60+am)); };
+const fmtDayHu = ds => { const d = parseDate(ds); return `${d.getFullYear()}. ${HU_MONTHS[d.getMonth()]} ${d.getDate()}.`; };
 
 // Munkanap-naptár: napok kijelölése a havi naptárban, alatta egyszerre beállítható időtartam (pl. 8–19).
-// Minden napon látszik, mettől meddig és hány órát dolgozik a barber, alul a havi összeg.
+// Online csak a megnyitott napokra lehet foglalni. Minden napon látszik, mettől meddig és hány órát
+// dolgozik a barber, alul a havi összeg és hogy meddig foglalható online.
 function WorkDaysCalendar({ S, C, stylist, onSave }) {
   const todayD = getToday();
   const todayS = formatDate(todayD);
@@ -211,12 +214,17 @@ function WorkDaysCalendar({ S, C, stylist, onSave }) {
   const [from, setFrom] = React.useState("08:00");
   const [to, setTo] = React.useState("19:00");
 
+  const onVacation = ds => (stylist.vacation || []).some(v => ds >= v.from && ds <= v.to);
   const info = ds => {
-    if ((stylist.vacation || []).some(v => ds >= v.from && ds <= v.to)) return { kind: "vac" };
+    if (onVacation(ds)) return { kind: "vac" };
     const h = stylistDayHours(stylist, ds);
-    if (!h || h.off) return { kind: "off", custom: !!h?.custom };
-    return { kind: "work", custom: !!h.custom, open: h.open, close: h.close, mins: spanMinutes(h.open, h.close) };
+    if (h.off) return { kind: "off" };
+    return { kind: "work", open: h.open, close: h.close, mins: spanMinutes(h.open, h.close) };
   };
+
+  // Utolsó megnyitott (jövőbeli) nap → eddig foglalható online
+  const lastOpen = Object.keys(stylist.dayHours || {})
+    .filter(ds => ds >= todayS && info(ds).kind === "work").sort().slice(-1)[0];
 
   // Hétfővel kezdődő rács
   const y = month.getFullYear(), m = month.getMonth();
@@ -243,20 +251,33 @@ function WorkDaysCalendar({ S, C, stylist, onSave }) {
     // régi (1 évnél régebbi) bejegyzések takarítása
     const cut = formatDate(addDays(todayD, -400));
     Object.keys(dh).forEach(k => { if (k < cut) delete dh[k]; });
+    // a kijelölt napokat a régi szabadság-tartományokból is kivágjuk (a naptár kezeli a szabadnapot)
+    const dayBefore = ds => formatDate(addDays(parseDate(ds), -1));
+    const dayAfter = ds => formatDate(addDays(parseDate(ds), 1));
+    let vac = stylist.vacation || [];
     sel.forEach(ds => {
+      vac = vac.flatMap(v => (ds < v.from || ds > v.to) ? [v] : [
+        ...(v.from < ds ? [{ from: v.from, to: dayBefore(ds) }] : []),
+        ...(ds < v.to ? [{ from: dayAfter(ds), to: v.to }] : []),
+      ]);
       if (mode === "work") dh[ds] = { open: from, close: to };
-      else if (mode === "off") dh[ds] = { off: true };
       else delete dh[ds];
     });
-    onSave({ ...stylist, dayHours: dh });
+    onSave({ ...stylist, dayHours: dh, vacation: vac });
     setSel([]);
   };
 
-  const selMins = mode => sel.length * spanMinutes(from, to);
   const accentSoft = C.isLight ? "#e7f4ee" : "rgba(255,255,255,0.08)";
 
   return (
     <div>
+      <div style={{fontSize:"12px", marginBottom:"10px", padding:"8px 10px", borderRadius:"6px",
+        background: lastOpen ? accentSoft : C.surfaceAlt, color: lastOpen ? C.text : C.danger, border:`1px solid ${lastOpen ? C.accent : C.border}`}}>
+        {lastOpen
+          ? <>🌐 Online foglalható: <b>{fmtDayHu(lastOpen).replace(/\.$/, "")}-ig</b> (csak a megnyitott napokra)</>
+          : <>⚠ Nincs megnyitott nap — online most nem lehet foglalni ehhez a barberhez.</>}
+      </div>
+
       <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"8px", gap:"6px"}}>
         <button style={{...S.btnSec, padding:"6px 12px"}} onClick={() => setMonth(new Date(y, m - 1, 1))} aria-label="Előző hónap">‹</button>
         <div style={{fontWeight:"700", fontSize:"14px"}}>{y}. {HU_MONTHS[m]}</div>
@@ -273,20 +294,19 @@ function WorkDaysCalendar({ S, C, stylist, onSave }) {
           const i = info(ds);
           const past = ds < todayS;
           const picked = sel.includes(ds);
-          const bg = picked ? C.accent : i.kind === "work" ? (i.custom ? accentSoft : C.surface) : C.surfaceAlt;
-          const fg = picked ? C.accentText : C.text;
+          const work = i.kind === "work";
           return (
             <button key={ds} disabled={past} onClick={() => toggle(ds)} aria-pressed={picked}
               style={{minHeight:"54px", padding:"4px 2px", borderRadius:"6px", fontFamily:"inherit", textAlign:"center",
-                border: `1px solid ${picked ? C.accent : i.custom ? C.accent : C.border}`,
-                background: bg, color: fg, opacity: past ? 0.45 : 1, cursor: past ? "default" : "pointer",
+                border: `1px solid ${picked || work ? C.accent : C.border}`,
+                background: picked ? C.accent : work ? accentSoft : C.surfaceAlt,
+                color: picked ? C.accentText : C.text, opacity: past ? 0.45 : 1, cursor: past ? "default" : "pointer",
                 display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"flex-start", gap:"1px", minWidth:0}}>
               <span style={{fontSize:"12px", fontWeight: ds === todayS ? "800" : "600", textDecoration: ds === todayS ? "underline" : "none"}}>{Number(ds.slice(8))}</span>
-              {i.kind === "work" && <>
+              {work && <>
                 <span style={{fontSize:"10px", whiteSpace:"nowrap"}}>{fmtHour(i.open)}–{fmtHour(i.close)}</span>
                 <span style={{fontSize:"10px", fontWeight:"700", color: picked ? C.accentText : C.accent}}>{fmtHours(i.mins)} ó</span>
               </>}
-              {i.kind === "off" && <span style={{fontSize:"10px", color: picked ? C.accentText : C.muted}}>zárva</span>}
               {i.kind === "vac" && <span style={{fontSize:"10px", color: picked ? C.accentText : C.warning}}>szabi</span>}
             </button>
           );
@@ -297,7 +317,7 @@ function WorkDaysCalendar({ S, C, stylist, onSave }) {
         Ebben a hónapban: <b style={{color:C.text}}>{monthDays} munkanap</b>, összesen <b style={{color:C.text}}>{fmtHours(monthMins)} óra</b>
       </div>
       <div style={{fontSize:"10px", color:C.muted, marginTop:"2px"}}>
-        Keretes nap = egyedileg beállítva; a többi a heti munkaidőt követi. A szabadság mindig zár. A napok neve fölött kattintva az összes olyan napot kijelölöd.
+        Zöld nap = dolgozik, erre lehet online foglalni. A többi nap zárva. A napok nevére kattintva az összes olyan napot kijelölöd.
       </div>
 
       <div style={{marginTop:"10px", padding:"10px", borderRadius:"6px", background:C.surfaceAlt, border:`1px solid ${C.border}`}}>
@@ -310,12 +330,11 @@ function WorkDaysCalendar({ S, C, stylist, onSave }) {
               <input type="time" step="900" value={from} onChange={e => setFrom(e.target.value)} style={{...S.input, width:"110px", padding:"6px 8px"}} />
               <span>–</span>
               <input type="time" step="900" value={to} onChange={e => setTo(e.target.value)} style={{...S.input, width:"110px", padding:"6px 8px"}} />
-              <span style={{fontSize:"12px", color:C.sub}}>{fmtHours(spanMinutes(from, to))} ó/nap · összesen {fmtHours(selMins())} ó</span>
+              <span style={{fontSize:"12px", color:C.sub}}>{fmtHours(spanMinutes(from, to))} ó/nap · összesen {fmtHours(sel.length * spanMinutes(from, to))} ó</span>
             </div>
             <div style={{display:"flex", gap:"6px", flexWrap:"wrap"}}>
               <button style={{...S.btn, padding:"9px 14px", fontSize:"12px"}} onClick={() => apply("work")}>✓ Dolgozom {fmtHour(from)}–{fmtHour(to)}</button>
-              <button style={S.btnSec} onClick={() => apply("off")}>✕ Zárva (nem dolgozom)</button>
-              <button style={S.btnSec} onClick={() => apply("reset")}>↺ Vissza a heti munkaidőre</button>
+              <button style={S.btnSec} onClick={() => apply("off")}>✕ Nem dolgozom</button>
               <button style={{...S.btnSec, border:"none", color:C.sub}} onClick={() => setSel([])}>Kijelölés törlése</button>
             </div>
           </>
@@ -893,11 +912,18 @@ function App() {
   React.useEffect(() => { stylistsRef.current = stylists; }, [stylists]);
 
   const stylistsLoadedRef = React.useRef(false);
+  // Utoljára a szerverrel egyező állapot barberenként (kulcs-sorrendtől független JSON)
+  const stylistSyncedRef = React.useRef({});
+  const stableJson = v => Array.isArray(v) ? "[" + v.map(stableJson).join(",") + "]"
+    : (v && typeof v === "object") ? "{" + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ":" + stableJson(v[k])).join(",") + "}"
+    : JSON.stringify(v === undefined ? null : v);
+  const stylistKey = (s, i) => stableJson([i, (({ password, ...rest }) => rest)(s)]);
   async function syncStylistsUp(list) {
     if (!sb || !salonId || !staffMode || !stylistsLoadedRef.current) return;
     try {
-      if (list.length > 0) {
-        const rows = list.map((s, i) => ({
+      const changed = list.map((s, i) => [s, i]).filter(([s, i]) => stylistSyncedRef.current[String(s.id)] !== stylistKey(s, i));
+      if (changed.length > 0) {
+        const rows = changed.map(([s, i]) => ({
           salon_id: salonId, ext_id: String(s.id),
           name: s.name || "", initials: s.initials || "", color: s.color || "#888888",
           email: s.email || null, sort_order: i,
@@ -905,6 +931,7 @@ function App() {
         }));
         const { error } = await sb.from("stylists").upsert(rows, { onConflict: "salon_id,ext_id" });
         if (error) throw error;
+        changed.forEach(([s, i]) => { stylistSyncedRef.current[String(s.id)] = stylistKey(s, i); });
       }
       const prev = prevStylistIdsRef.current;
       const currentIds = new Set(list.map(s => String(s.id)));
@@ -933,6 +960,7 @@ function App() {
       stylistsLoadedRef.current = true;
       stylistSyncingRef.current = true;
       prevStylistIdsRef.current = new Set(downloaded.map(s => String(s.id)));
+      stylistSyncedRef.current = Object.fromEntries(downloaded.map((s, i) => [String(s.id), stylistKey(s, i)]));
       setStylists(downloaded);
     } catch (err) { console.error("Barber szinkron (le) hiba:", err); }
   }
@@ -1127,14 +1155,13 @@ function App() {
     return HOURS_EXT.filter(x => HOURS.includes(x) || (x >= h.open && x < h.close));
   }
 
-  // Online foglalhatósági időszak: ha a barber megadott tól-ig dátumot, az dominál;
-  // különben a gördülő "X nap" (bookingHorizonDays, alap 30).
+  // Online foglalhatósági időszak: ma és a 180. nap között (a nap nyitottságát a naptár adja).
   function isWithinBookingWindow(stylist, dateStr) {
     if (!stylist) return false;
     const todayS = formatDate(today);
-    const from = stylist.bookingFrom || todayS;
-    const until = stylist.bookingUntil || formatDate(addDays(today, stylist.bookingHorizonDays || 30));
-    return dateStr >= from && dateStr <= until;
+    // Online az a nap foglalható, amit a barber a naptárban megnyitott (lásd stylistDayHours);
+    // meddig előre: ameddig napokat nyitott meg, legfeljebb 180 napig (mint a szerveren).
+    return dateStr >= todayS && dateStr <= formatDate(addDays(today, 180));
   }
 
   // Időpontok között eltelt percek számítása
@@ -1762,10 +1789,6 @@ function App() {
 
   const weekStart = addDays(today, calOffset * 7);
   const weekDays = Array.from({length:7}, (_,i) => addDays(weekStart, i));
-  // Meddig előre lehet foglalni: a barberek közül a leghosszabb előfoglalási ablak (alap: 30 nap)
-  const maxBookingDate = stylists.length
-    ? stylists.map(s => s.bookingUntil || formatDate(addDays(today, s.bookingHorizonDays || 30))).sort().slice(-1)[0]
-    : formatDate(addDays(today, 30));
   const adminWeekStart = addDays(today, adminWeekOffset * 7);
   const adminWeekDays = Array.from({length:7}, (_,i) => addDays(adminWeekStart, i));
   const todayStr = formatDate(today);
@@ -2137,9 +2160,10 @@ function App() {
                   const ds = formatDate(d);
                   const isPast = d < today;
                   const isSel = ds === selectedDate;
-                  const isSunday = d.getDay() === 0;
-                  const beyondHorizon = formatDate(d) > maxBookingDate;
-                  const disabled = isPast || isSunday || beyondHorizon;
+                  // Zárva: aznap senki nem dolgozik. Nem választható: senkihez nem lehet online foglalni
+                  // (zárva, vagy a heti alap szerinti nap még az előfoglalási ablakon túl van).
+                  const isClosed = !stylists.some(s => isStylistWorking(s.id, ds));
+                  const disabled = isPast || isClosed || !stylists.some(s => isStylistWorking(s.id, ds) && isWithinBookingWindow(s, ds));
                   return (
                     <button key={ds} disabled={disabled}
                       onClick={() => setSelectedDate(ds)}
@@ -2150,7 +2174,7 @@ function App() {
                         cursor: disabled ? "default" : "pointer", textAlign:"center"}}>
                       <div style={{fontSize:"9px", opacity:0.7, fontWeight:"600", letterSpacing:"0.1em"}}>{T.weekdays[d.getDay()]}</div>
                       <div style={{fontSize:"20px", fontWeight:"700", marginTop:"2px"}}>{d.getDate()}</div>
-                      {isSunday && <div style={{fontSize:"8px", marginTop:"2px", color: isSel ? C.accentText : C.muted}}>{T.closedDay.toUpperCase()}</div>}
+                      {isClosed && !isPast && <div style={{fontSize:"8px", marginTop:"2px", color: isSel ? C.accentText : C.muted}}>{T.closedDay.toUpperCase()}</div>}
                     </button>
                   );
                 })}
@@ -3361,70 +3385,6 @@ function App() {
                           <div style={{marginTop:"12px", paddingTop:"12px", borderTop:`1px solid ${C.border}`}}>
                             <div style={{fontSize:"11px", color:C.sub, marginBottom:"8px", letterSpacing:"0.1em", fontWeight:"700"}}>📆 MUNKANAPOK NAPTÁRBAN</div>
                             <WorkDaysCalendar S={S} C={C} stylist={s} onSave={saveStylist} />
-                            <div style={{fontSize:"11px", color:C.sub, margin:"16px 0 8px", letterSpacing:"0.1em", fontWeight:"700", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>🕒 HETI ALAP MUNKAIDŐ</div>
-                            {WEEKDAY_KEYS.map((dk, i) => (
-                              <div key={dk} style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px", flexWrap:"wrap"}}>
-                                <div style={{width:"50px", fontSize:"11px", fontWeight:"700"}}>{["Vas","Hét","Kedd","Sze","Csü","Pén","Szo"][i]}</div>
-                                <label style={{fontSize:"11px", display:"flex", alignItems:"center", gap:"4px", cursor:"pointer"}}>
-                                  <input type="checkbox" checked={!s.hours[dk]?.off} onChange={e => saveStylist({...s, hours: {...s.hours, [dk]: {...s.hours[dk], off: !e.target.checked}}})} />
-                                  nyitva
-                                </label>
-                                {!s.hours[dk]?.off && (
-                                  <>
-                                    <input type="time" style={{...S.input, width:"100px", padding:"4px 8px", fontSize:"11px"}} value={s.hours[dk]?.open || "09:00"} onChange={e => saveStylist({...s, hours: {...s.hours, [dk]: {...s.hours[dk], open: e.target.value}}})} />
-                                    <input type="time" style={{...S.input, width:"100px", padding:"4px 8px", fontSize:"11px"}} value={s.hours[dk]?.close || "18:00"} onChange={e => saveStylist({...s, hours: {...s.hours, [dk]: {...s.hours[dk], close: e.target.value}}})} />
-                                  </>
-                                )}
-                              </div>
-                            ))}
-
-                            <div style={{marginTop:"14px", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>
-                              <div style={{fontSize:"11px", color:C.sub, marginBottom:"8px", letterSpacing:"0.1em", fontWeight:"700"}}>🏖 SZABADSÁGOK</div>
-                              {(s.vacation || []).map((v, vi) => (
-                                <div key={vi} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 10px", background:C.surfaceAlt, borderRadius:"4px", marginBottom:"4px"}}>
-                                  <span style={{fontSize:"11px"}}>📅 {v.from} – {v.to}</span>
-                                  <button style={S.btnIcon} onClick={() => saveStylist({...s, vacation: s.vacation.filter((_,j)=>j!==vi)})}>✕</button>
-                                </div>
-                              ))}
-                              <div style={{display:"flex", gap:"6px", marginTop:"6px", flexWrap:"wrap"}}>
-                                <input type="date" id={`vacf_${s.id}`} style={{...S.input, flex:1, minWidth:"110px", padding:"6px 10px", fontSize:"11px"}} />
-                                <input type="date" id={`vact_${s.id}`} style={{...S.input, flex:1, minWidth:"110px", padding:"6px 10px", fontSize:"11px"}} />
-                                <button style={{...S.btnSec, fontSize:"11px"}} onClick={() => {
-                                  const from = document.getElementById(`vacf_${s.id}`).value;
-                                  const to = document.getElementById(`vact_${s.id}`).value;
-                                  if (!from || !to) { showToast("Adj meg kezdő és záró napot!", "error"); return; }
-                                  if (from > to) { showToast("A záró nap nem lehet korábbi!", "error"); return; }
-                                  saveStylist({...s, vacation: [...(s.vacation || []), {from, to}]});
-                                  document.getElementById(`vacf_${s.id}`).value = "";
-                                  document.getElementById(`vact_${s.id}`).value = "";
-                                  showToast("Szabadság rögzítve");
-                                }}>+</button>
-                              </div>
-                            </div>
-
-                            {/* Előfoglalási ablak */}
-                            <div style={{marginTop:"14px", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>
-                              <div style={{fontSize:"11px", color:C.sub, marginBottom:"8px", letterSpacing:"0.1em", fontWeight:"700"}}>📅 ELŐFOGLALÁSI ABLAK</div>
-                              <div style={{fontSize:"11px", color:C.textDim, marginBottom:"6px"}}>Meddig előre foglalhatnak ehhez a barberhez a vendégek.</div>
-                              <select style={{...S.input, fontSize:"12px", padding:"6px 10px", cursor:"pointer"}} value={s.bookingHorizonDays || 30} onChange={e => saveStylist({...s, bookingHorizonDays: +e.target.value})}>
-                                <option value={7}>1 hét (7 nap)</option>
-                                <option value={14}>2 hét (14 nap)</option>
-                                <option value={21}>3 hét (21 nap)</option>
-                                <option value={30}>1 hónap (30 nap)</option>
-                                <option value={45}>6 hét (45 nap)</option>
-                                <option value={60}>2 hónap (60 nap)</option>
-                                <option value={90}>3 hónap (90 nap)</option>
-                              </select>
-                              <div style={{fontSize:"11px", color:C.textDim, fontWeight:"700", marginTop:"10px", marginBottom:"4px"}}>📆 VAGY konkrét időszak (-tól -ig):</div>
-                              <div style={{display:"flex", gap:"6px", flexWrap:"wrap", alignItems:"center"}}>
-                                <input type="date" value={s.bookingFrom || ""} onChange={e => saveStylist({...s, bookingFrom: e.target.value})} style={{...S.input, flex:1, minWidth:"110px", padding:"6px 10px", fontSize:"11px"}} />
-                                <span style={{fontSize:"11px", color:C.sub}}>–</span>
-                                <input type="date" value={s.bookingUntil || ""} onChange={e => saveStylist({...s, bookingUntil: e.target.value})} style={{...S.input, flex:1, minWidth:"110px", padding:"6px 10px", fontSize:"11px"}} />
-                              </div>
-                              {(s.bookingFrom || s.bookingUntil) && (
-                                <button onClick={() => saveStylist({...s, bookingFrom: "", bookingUntil: ""})} style={{...S.btnSec, marginTop:"6px", fontSize:"11px"}}>↺ Időszak törlése</button>
-                              )}
-                            </div>
 
                             {/* Szolgáltatások konfigurálása */}
                             <div style={{marginTop:"14px", paddingTop:"10px", borderTop:`1px solid ${C.borderLight}`}}>
@@ -3581,9 +3541,6 @@ function App() {
               const myBookings = bookings.filter(b => b.stylistId === me.id);
               const myCompleted = myBookings.filter(b => b.status === "completed");
               const myRevenueMonth = myCompleted.filter(b => b.date.startsWith(todayStr.slice(0,7))).reduce((s,b)=>s+(b.paidPrice ?? b.price),0);
-              const newVacFrom = `vac_from_${me.id}`;
-              const newVacTo = `vac_to_${me.id}`;
-              const newDayOff = `day_off_${me.id}`;
 
               return (
                 <>
@@ -3656,105 +3613,10 @@ function App() {
                   {/* Munkanapok naptárban */}
                   <div style={S.card}>
                     <span style={S.label}>📆 Munkanapok naptárban</span>
-                    <div style={{fontSize:"11px", color:C.textDim, marginBottom:"10px"}}>Jelöld ki a napokat, alul add meg mettől meddig dolgozol (pl. 8–19). Így előre látod, melyik nap hány órát dolgozol. Ami itt be van állítva, az felülírja a lenti heti munkaidőt.</div>
+                    <div style={{fontSize:"11px", color:C.textDim, marginBottom:"10px"}}>Jelöld ki a napokat, amikor dolgozol, és add meg mettől meddig (pl. 8–19). Online csak ezekre a napokra foglalhatnak hozzád, és csak addig, ameddig napokat megnyitottál. Szabadsághoz egyszerűen ne nyisd meg a napot (vagy jelöld ki és „Nem dolgozom”).</div>
                     <WorkDaysCalendar S={S} C={C} stylist={me} onSave={saveStylist} />
                   </div>
 
-                  {/* Munkaidő */}
-                  <div style={S.card}>
-                    <span style={S.label}>🕒 Munkaidő</span>
-                    <div style={{fontSize:"11px", color:C.textDim, marginBottom:"4px"}}>Itt állíthatod be melyik napon dolgozol és milyen időtartamban.</div>
-                    <div style={{fontSize:"11px", color:C.accent, marginBottom:"12px"}}>🔁 Ez a heti beosztás minden héten automatikusan ismétlődik.</div>
-                    {WEEKDAY_KEYS.map((dk, i) => (
-                      <div key={dk} style={{display:"flex", alignItems:"center", gap:"8px", marginBottom:"8px", flexWrap:"wrap"}}>
-                        <div style={{width:"60px", fontSize:"12px", fontWeight:"700"}}>{["Vas","Hét","Kedd","Sze","Csü","Pén","Szo"][i]}</div>
-                        <label style={{fontSize:"11px", display:"flex", alignItems:"center", gap:"4px", cursor:"pointer"}}>
-                          <input type="checkbox" checked={!me.hours[dk]?.off} onChange={e => saveStylist({...me, hours: {...me.hours, [dk]: {...me.hours[dk], off: !e.target.checked}}})} />
-                          nyitva
-                        </label>
-                        {!me.hours[dk]?.off && (
-                          <>
-                            <input type="time" style={{...S.input, width:"110px", padding:"6px 8px"}} value={me.hours[dk]?.open || "09:00"} onChange={e => saveStylist({...me, hours: {...me.hours, [dk]: {...me.hours[dk], open: e.target.value}}})} />
-                            <span style={{fontSize:"11px", color:C.sub}}>–</span>
-                            <input type="time" style={{...S.input, width:"110px", padding:"6px 8px"}} value={me.hours[dk]?.close || "18:00"} onChange={e => saveStylist({...me, hours: {...me.hours, [dk]: {...me.hours[dk], close: e.target.value}}})} />
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Előfoglalási ablak */}
-                  <div style={S.card}>
-                    <span style={S.label}>📅 Meddig előre foglalhatnak</span>
-                    <div style={{fontSize:"11px", color:C.textDim, marginBottom:"12px"}}>Ennyivel előre tudnak hozzád időpontot foglalni a vendégek. Ezt te állítod be magadnak, a többi barbertől függetlenül.</div>
-                    <select style={{...S.input, cursor:"pointer"}} value={me.bookingHorizonDays || 30} onChange={e => saveStylist({...me, bookingHorizonDays: +e.target.value})}>
-                      <option value={7}>1 hét (7 nap)</option>
-                      <option value={14}>2 hét (14 nap)</option>
-                      <option value={21}>3 hét (21 nap)</option>
-                      <option value={30}>1 hónap (30 nap)</option>
-                      <option value={45}>6 hét (45 nap)</option>
-                      <option value={60}>2 hónap (60 nap)</option>
-                      <option value={90}>3 hónap (90 nap)</option>
-                    </select>
-                    <div style={{fontSize:"11px", color:C.accent, marginTop:"8px"}}>Jelenleg: {me.bookingHorizonDays || 30} napra előre foglalhatnak hozzád.</div>
-                    <div style={{marginTop:"14px", paddingTop:"12px", borderTop:`1px solid ${C.borderLight}`}}>
-                      <div style={{fontSize:"11px", color:C.textDim, fontWeight:"700", marginBottom:"4px"}}>📆 VAGY konkrét időszak (-tól -ig):</div>
-                      <div style={{fontSize:"11px", color:C.textDim, marginBottom:"8px"}}>Ha kitöltöd, CSAK ebben az időszakban foglalhatnak hozzád online (felülírja a fenti napokat). Üresen hagyva a fenti "X nap" érvényes. Így te nyithatod meg időszakonként a foglalhatóságot.</div>
-                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap", alignItems:"center"}}>
-                        <input type="date" value={me.bookingFrom || ""} onChange={e => saveStylist({...me, bookingFrom: e.target.value})} style={{...S.input, flex:1, minWidth:"130px"}} />
-                        <span style={{fontSize:"12px", color:C.sub}}>–</span>
-                        <input type="date" value={me.bookingUntil || ""} onChange={e => saveStylist({...me, bookingUntil: e.target.value})} style={{...S.input, flex:1, minWidth:"130px"}} />
-                      </div>
-                      {(me.bookingFrom || me.bookingUntil) && (
-                        <button onClick={() => saveStylist({...me, bookingFrom: "", bookingUntil: ""})} style={{...S.btnSec, marginTop:"8px", fontSize:"11px"}}>↺ Időszak törlése (vissza a gördülő ablakra)</button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Szabadság */}
-                  <div style={S.card}>
-                    <span style={S.label}>🏖 Szabadságok</span>
-                    {(me.vacation || []).length === 0 ? (
-                      <div style={{fontSize:"12px", color:C.muted, marginBottom:"10px"}}>Nincs még rögzített szabadság.</div>
-                    ) : (
-                      (me.vacation || []).map((v, i) => (
-                        <div key={i} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:C.surfaceAlt, borderRadius:"6px", marginBottom:"6px"}}>
-                          <span style={{fontSize:"13px"}}>📅 {v.from} – {v.to}</span>
-                          <button style={S.btnIcon} onClick={() => saveStylist({...me, vacation: me.vacation.filter((_,j)=>j!==i)})}>✕</button>
-                        </div>
-                      ))
-                    )}
-                    <div style={{display:"flex", flexDirection:"column", gap:"6px", marginTop:"10px"}}>
-                      <div style={{fontSize:"11px", color:C.textDim, fontWeight:"700"}}>📅 Egy nap kivétele (pl. orvos, elfoglaltság):</div>
-                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap"}}>
-                        <input type="date" id={newDayOff} style={{...S.input, flex:1, minWidth:"120px"}} />
-                        <button style={S.btnSec} onClick={() => {
-                          const d = document.getElementById(newDayOff).value;
-                          if (!d) { showToast("Válassz egy napot!", "error"); return; }
-                          saveStylist({...me, vacation: [...(me.vacation || []), {from: d, to: d}]});
-                          document.getElementById(newDayOff).value = "";
-                          showToast("Nap kivéve – ezen a napon nem leszel foglalható");
-                        }}>Nap kivétele</button>
-                      </div>
-                    </div>
-                    <div style={{display:"flex", flexDirection:"column", gap:"6px", marginTop:"14px"}}>
-                      <div style={{fontSize:"11px", color:C.textDim, fontWeight:"700"}}>🏖 Több napos szabadság (-tól -ig):</div>
-                      <div style={{display:"flex", gap:"6px", flexWrap:"wrap"}}>
-                        <input type="date" id={newVacFrom} style={{...S.input, flex:1, minWidth:"120px"}} />
-                        <input type="date" id={newVacTo} style={{...S.input, flex:1, minWidth:"120px"}} />
-                        <button style={S.btnSec} onClick={() => {
-                          const from = document.getElementById(newVacFrom).value;
-                          const to = document.getElementById(newVacTo).value;
-                          if (!from || !to) { showToast("Adj meg kezdő és záró napot!", "error"); return; }
-                          if (from > to) { showToast("A záró nap nem lehet korábbi!", "error"); return; }
-                          saveStylist({...me, vacation: [...(me.vacation || []), {from, to}]});
-                          document.getElementById(newVacFrom).value = "";
-                          document.getElementById(newVacTo).value = "";
-                          showToast("Szabadság rögzítve");
-                        }}>+ Hozzáad</button>
-                      </div>
-                    </div>
-                  </div>
                 </>
               );
             })()}
