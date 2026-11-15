@@ -414,6 +414,78 @@ function InstallAppBox({ S, C }) {
   );
 }
 
+// Web Push nyilvános kulcs (a privát fele a Supabase Vaultban van — ez nyugodtan lehet publikus)
+const VAPID_PUBLIC = "BL5EFvHm-MM5S53PXdTl74TQ0b0bh06BUi31nmpvNiTT_7VcRb2m_UNMLD2SCtqnZsIrVxPakALt-dZNNsl0laM";
+const b64uToBytes = s => { const p = "=".repeat((4 - s.length % 4) % 4); const r = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(r, c => c.charCodeAt(0)); };
+
+// „🔔 Értesítés a telefonra” doboz az admin menüben: Web Push feliratkozás új foglalásról / lemondásról.
+// Admin minden foglalásról kap, barber csak a sajátjáról (ezt a szerver dönti el: cnf_push_targets).
+// iPhone-on csak a TELEPÍTETT appból működik (iOS 16.4+).
+function NotifyBox({ S, C }) {
+  const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  const [on, setOn] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+
+  const register = async (sub) => {
+    const j = sub.toJSON();
+    const { data, error } = await sb.rpc("cnf_push_subscribe", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent });
+    if (error || !data || !data.ok) throw new Error((error && error.message) || (data && data.error) || "mentési hiba");
+  };
+
+  // induláskor: van-e már feliratkozás ezen az eszközön? (és frissítjük a szerveren, pl. másik belépés után)
+  React.useEffect(() => {
+    if (!supported || !sb) return;
+    navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => {
+      if (sub && Notification.permission === "granted") { setOn(true); window.__cnfPushOn = true; register(sub).catch(() => {}); }
+    }).catch(() => {});
+  }, []);
+
+  if (!supported && !ios) return null;
+
+  const enable = async () => {
+    setBusy(true); setMsg("");
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { setMsg("Az értesítést a telefon beállításaiban engedélyezd ennél az appnál."); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) ||
+        await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(VAPID_PUBLIC) });
+      await register(sub);
+      setOn(true); window.__cnfPushOn = true; setMsg("Bekapcsolva ✓");
+    } catch (e) { setMsg("Nem sikerült: " + (e && e.message ? e.message : e)); }
+    finally { setBusy(false); }
+  };
+  const disable = async () => {
+    setBusy(true); setMsg("");
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) { await sb.rpc("cnf_push_unsubscribe", { p_endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
+      setOn(false); window.__cnfPushOn = false; setMsg("Kikapcsolva");
+    } catch (e) { setMsg("Nem sikerült: " + (e && e.message ? e.message : e)); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="admin-install" style={{border:`1px solid ${C.border}`, borderRadius:"8px", padding:"10px", margin:"8px 0", background:C.surface}}>
+      <div style={{fontSize:"12px", fontWeight:"700"}}>🔔 Értesítés új foglalásról</div>
+      {ios && !standalone ? (
+        <div style={{fontSize:"11px", color:C.sub, marginTop:"6px", lineHeight:1.5}}>iPhone-on előbb telepítsd az appot a kezdőképernyőre, és onnan megnyitva kapcsold be.</div>
+      ) : (
+        <button disabled={busy} onClick={on ? disable : enable}
+          style={{...(on ? S.btnSec : S.btn), width:"100%", padding:"9px 10px", fontSize:"12px", marginTop:"6px", opacity: busy ? 0.6 : 1}}>
+          {busy ? "…" : on ? "Bekapcsolva — kikapcsolás" : "Bekapcsolás ezen a telefonon"}
+        </button>
+      )}
+      {msg && <div style={{fontSize:"11px", color: msg.startsWith("Nem") ? C.danger : C.sub, marginTop:"6px"}}>{msg}</div>}
+      <div style={{fontSize:"10px", color:C.muted, marginTop:"6px"}}>Akkor is szól, ha az app be van zárva. Eszközönként külön kell bekapcsolni.</div>
+    </div>
+  );
+}
+
 // Jelszó beállító doboz: két mező (új + megerősítés) és egy gomb. Az onSubmit(jelszó) Promise-t ad vissza.
 function PasswordBox({ S, C, onSubmit, buttonLabel = "Jelszó mentése", hint }) {
   const [pw, setPw] = React.useState("");
@@ -514,7 +586,15 @@ function App() {
   const [guestMonth, setGuestMonth] = React.useState(() => { const t = getToday(); return new Date(t.getFullYear(), t.getMonth(), 1); });
   const [adminWeekOffset, setAdminWeekOffset] = React.useState(0);
   const [calendarView, setCalendarView] = React.useState("day"); // day | week
-  const [adminDate, setAdminDate] = React.useState(formatDate(today));
+  const [adminDate, setAdminDate] = React.useState(() => { try { const n = new URLSearchParams(window.location.search).get("nap"); return /^\d{4}-\d{2}-\d{2}$/.test(n || "") ? n : formatDate(today); } catch { return formatDate(today); } });
+  React.useEffect(() => {
+    const openDate = d => { if (!/^\d{4}-\d{2}-\d{2}$/.test(d || "")) return; setView("admin"); setAdminTab("calendar"); setAdminDate(d); };
+    try { const n = new URLSearchParams(window.location.search).get("nap"); if (n) { openDate(n); window.history.replaceState(null, "", window.location.pathname); } } catch {}
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = e => { if (e.data && e.data.type === "cnf-open-date") openDate(e.data.date); };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, []);
   const [calView, setCalView] = React.useState("day"); // "day" | "week"
   const [bookingSearch, setBookingSearch] = React.useState("");
   const [showDayClose, setShowDayClose] = React.useState(false);
@@ -799,7 +879,7 @@ function App() {
     setBookingAlerts(prev => [...list.map(b => ({ key: k(b), b, kind })), ...prev.filter(a => !list.some(b => k(b) === a.key))].slice(0, 5));
     playAlertSound();
     try {
-      if (window.Notification && Notification.permission === "granted") {
+      if (window.Notification && Notification.permission === "granted" && !window.__cnfPushOn) {
         list.forEach(b => {
           const n = new Notification(kind === "cancel" ? "❌ Lemondott foglalás" : "💈 Új online foglalás", {
             body: `${b.clientName} · ${b.date} ${b.time}\n${b.service} · ${b.stylist}`,
@@ -2621,6 +2701,7 @@ function App() {
               })()}
             </nav>
             <InstallAppBox S={S} C={C} />
+            <NotifyBox S={S} C={C} />
             <button className="admin-side-logout" style={{...S.btnSec, width:"100%"}} onClick={logout}>🔓 Kijelentkezés</button>
             </aside>
 
