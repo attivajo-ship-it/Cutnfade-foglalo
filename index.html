@@ -1963,7 +1963,9 @@ function App() {
         .admin-tab { text-align: left; width: 100%; }
         .admin-side-mobile-logout { display: none; }
         @media (max-width: 900px) {
-          .admin-layout { flex-direction: column; gap: 0; }
+          /* egymás alatt: a tartalom a képernyő szélességét vegye fel (ne a naptárét) — 2026-11-15 iPhone-hiba */
+          .admin-layout { flex-direction: column; gap: 0; align-items: stretch; }
+          .admin-content { width: 100%; }
           .admin-side { width: 100%; position: static; }
           .admin-tabs { flex-direction: row; overflow-x: auto; }
           .admin-tab { width: auto; white-space: nowrap; }
