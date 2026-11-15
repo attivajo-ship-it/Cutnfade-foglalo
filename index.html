@@ -756,6 +756,9 @@ function App() {
 
   // ===== LEMONDÁS LINKRŐL (…/?lemondas=<kód>, a visszaigazoló/emlékeztető levélből) =====
   const [cancelToken] = React.useState(() => { try { return new URLSearchParams(window.location.search).get("lemondas") || ""; } catch { return ""; } });
+  // Leiratkozás az értékelés-kérő levelekről (…/?leiratkozas=<kód>, 2026-11-15)
+  const [optoutToken] = React.useState(() => { try { return new URLSearchParams(window.location.search).get("leiratkozas") || ""; } catch { return ""; } });
+  const [optoutState, setOptoutState] = React.useState("ask"); // ask | busy | done | bad
   const [cancelInfo, setCancelInfo] = React.useState(null);     // null = töltés
   const [cancelState, setCancelState] = React.useState("idle"); // idle | busy | done | error
   const [cancelMsg, setCancelMsg] = React.useState("");
@@ -2062,6 +2065,48 @@ function App() {
   };
 
   const unreadNotif = notifications.filter(n => !n.read).length;
+
+  // Leiratkozó oldal (értékelés-kérő levél alján) — gombnyomásra iratkozik le (a levélszűrők ne tegyék meg helyette)
+  if (optoutToken) {
+    const bebas = "'Bebas Neue', Impact, sans-serif";
+    const doOptout = async () => {
+      if (!sb || !/^[0-9a-f-]{36}$/i.test(optoutToken)) { setOptoutState("bad"); return; }
+      setOptoutState("busy");
+      try {
+        const { data, error } = await sb.rpc("cnf_review_optout", { p_token: optoutToken });
+        setOptoutState(!error && data && data.ok ? "done" : "bad");
+      } catch (e) { setOptoutState("bad"); }
+    };
+    const home = () => { try { window.location.href = window.location.pathname; } catch {} };
+    return (
+      <div style={{...S.app, padding:"24px 16px"}}>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Bebas+Neue&display=swap');`}</style>
+        <div style={{maxWidth:"460px", margin:"0 auto"}}>
+          <div style={{display:"flex", alignItems:"center", gap:"12px", margin:"4px 4px 18px"}}>
+            <div style={{width:"44px", height:"44px", borderRadius:"50%", background:C.accent, color:C.accentText, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:bebas, fontSize:"17px", letterSpacing:"0.05em"}}>CNF</div>
+            <div>
+              <div style={{fontFamily:bebas, fontSize:"22px", letterSpacing:"0.14em", lineHeight:1, color:C.text}}>CUT N' FADE</div>
+              <div style={{fontSize:"10px", letterSpacing:"0.2em", color:C.sub, marginTop:"3px"}}>BARBERSHOP · NYÍREGYHÁZA</div>
+            </div>
+          </div>
+          <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:"14px", padding:"28px 22px", textAlign:"center"}}>
+            <h1 style={{fontFamily:bebas, fontWeight:"400", fontSize:"30px", letterSpacing:"0.04em", lineHeight:1.1, margin:"0 0 8px", color:C.text}}>
+              {optoutState === "done" ? "Leiratkoztál" : optoutState === "bad" ? "Nem sikerült" : "Leiratkozás"}
+            </h1>
+            <p style={{fontSize:"14px", lineHeight:1.55, color:C.sub, margin:"0 0 18px"}}>
+              {optoutState === "done" ? "Több értékelés-kérő levelet nem küldünk. A foglalásaidról szóló leveleket (visszaigazolás, emlékeztető) továbbra is megkapod."
+                : optoutState === "bad" ? "Ez a link már nem érvényes. Ha nem szeretnél tőlünk ilyen levelet, válaszolj a levélre, és intézzük."
+                : "Nem szeretnél több értékelés-kérő levelet kapni tőlünk? A foglalásaidról szóló leveleket továbbra is megkapod."}
+            </p>
+            {(optoutState === "ask" || optoutState === "busy") && (
+              <button style={{...S.btn, width:"100%", marginBottom:"8px"}} disabled={optoutState === "busy"} onClick={doOptout}>{optoutState === "busy" ? "Egy pillanat…" : "Igen, leiratkozom"}</button>
+            )}
+            <button style={{...S.btnSec, width:"100%"}} onClick={home}>Időpontfoglalás</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Lemondási oldal (a levélben lévő linkről) — a foglaló helyett csak ez jelenik meg
   if (cancelToken) {
@@ -3976,6 +4021,19 @@ function App() {
                 </div>
 
                 <StaffAccountsBox S={S} C={C} salonId={salonId} stylists={stylists} />
+
+                <div style={S.card}>
+                  <span style={S.label}>⭐ Értékelés-kérő levél</span>
+                  <label style={{display:"flex", alignItems:"center", gap:"10px", fontSize:"14px", cursor:"pointer", marginBottom:"8px"}}>
+                    <input type="checkbox" checked={settings.reviewEnabled !== false} onChange={e=>setSettings({...settings, reviewEnabled: e.target.checked})} />
+                    Bekapcsolva
+                  </label>
+                  <div style={{fontSize:"12px", color:C.textDim, lineHeight:1.5}}>
+                    Az időpont vége után {settings.reviewHours || 3} órával emailt kap a vendég egy „Értékelés írása a Google-on” gombbal.
+                    Vendégenként legfeljebb {settings.reviewEveryDays || 90} naponta egyszer; „nem jelent meg” foglalásra és leiratkozottnak nem megy.
+                    A BWnet-ből áthozott foglalásokra az átállásig nem megy.
+                  </div>
+                </div>
 
                 <div style={S.card}>
                   <span style={S.label}>⚙️ Beállítások</span>
