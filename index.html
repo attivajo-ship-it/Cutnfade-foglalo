@@ -515,6 +515,87 @@ function PasswordBox({ S, C, onSubmit, buttonLabel = "Jelszó mentése", hint })
   );
 }
 
+// Admin → Beállítás: belépési fiókok listája, jelszó beállítása bárkinek, új fiók létrehozása (staff-password).
+async function callStaffFn(body) {
+  const { data, error } = await sb.functions.invoke("staff-password", { body });
+  if (error) {
+    let m = "Nem sikerült.";
+    try { const j = await error.context.json(); if (j && j.error) m = j.error; } catch {}
+    throw new Error(m);
+  }
+  if (!data || !data.ok) throw new Error((data && data.error) || "Nem sikerült.");
+  return data;
+}
+function StaffAccountsBox({ S, C, salonId, stylists }) {
+  const [rows, setRows] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  const [openPw, setOpenPw] = React.useState(null);
+  const [adding, setAdding] = React.useState(false);
+  const [form, setForm] = React.useState({ email: "", role: "admin", stylistExtId: "" });
+  const load = React.useCallback(async () => {
+    if (!sb || !salonId) return;
+    const { data, error } = await sb.from("app_users").select("user_id, email, role, stylist_ext_id").eq("salon_id", salonId);
+    if (error) { setErr("A fiókok betöltése nem sikerült."); return; }
+    const order = r => (r.role === "admin" ? 0 : 1);
+    setRows((data || []).sort((a, b) => order(a) - order(b) || String(a.email).localeCompare(String(b.email))));
+  }, [salonId]);
+  React.useEffect(() => { load(); }, [load]);
+  const nameOf = r => r.role === "admin" ? "Admin" : ((stylists.find(s => String(s.id) === String(r.stylist_ext_id)) || {}).name || "Barber");
+  const freeStylists = stylists.filter(s => !(rows || []).some(r => String(r.stylist_ext_id) === String(s.id)));
+  return (
+    <div style={S.card}>
+      <span style={S.label}>👥 Belépési fiókok</span>
+      <div style={{fontSize:"12px", color:C.textDim, marginBottom:"10px"}}>
+        Admin: mindent lát és állít. Barber: csak a saját naptárát. A belépési név nem kell, hogy valódi postafiók legyen.
+      </div>
+      {err && <div style={{fontSize:"12px", color:C.danger, marginBottom:"8px"}}>{err}</div>}
+      {!rows && !err && <div style={{fontSize:"12px", color:C.sub}}>Betöltés…</div>}
+      {(rows || []).map(r => (
+        <div key={r.user_id || r.email} style={{borderTop:`1px solid ${C.border}`, padding:"8px 0"}}>
+          <div style={{display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap"}}>
+            <div style={{flex:"1 1 180px", minWidth:0}}>
+              <div style={{fontSize:"13px", fontWeight:700}}>{nameOf(r)} <span style={{fontSize:"11px", fontWeight:400, color:C.sub}}>· {r.role === "admin" ? "admin" : "barber"}</span></div>
+              <div style={{fontSize:"12px", color:C.sub, wordBreak:"break-all"}}>{r.email}</div>
+            </div>
+            {r.user_id && <button style={{...S.btnSec, padding:"6px 10px", fontSize:"12px"}} onClick={() => setOpenPw(openPw === r.user_id ? null : r.user_id)}>🔑 Új jelszó</button>}
+          </div>
+          {openPw === r.user_id && (
+            <div style={{marginTop:"8px"}}>
+              <PasswordBox S={S} C={C} buttonLabel="Jelszó beállítása" onSubmit={pw => callStaffFn({ userId: r.user_id, password: pw })} />
+            </div>
+          )}
+        </div>
+      ))}
+      <div style={{borderTop:`1px solid ${C.border}`, paddingTop:"10px", marginTop:"4px"}}>
+        {!adding ? (
+          <button style={{...S.btnSec, width:"100%"}} onClick={() => setAdding(true)}>➕ Új fiók</button>
+        ) : (
+          <div>
+            <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Belépési név (email formában)</div>
+            <input type="email" autoComplete="off" style={{...S.input, marginBottom:"8px"}} placeholder="pl. recepcio@cutnfade-nyiregyhaza.hu" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            <div style={{fontSize:"11px", color:C.sub, marginBottom:"4px"}}>Szerepkör</div>
+            <select style={{...S.input, marginBottom:"8px"}} value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
+              <option value="admin">Admin (mindent lát és állít)</option>
+              <option value="stylist">Barber (csak a saját naptára)</option>
+            </select>
+            {form.role === "stylist" && (
+              <select style={{...S.input, marginBottom:"8px"}} value={form.stylistExtId} onChange={e => setForm({ ...form, stylistExtId: e.target.value })}>
+                <option value="">— Melyik barber? —</option>
+                {freeStylists.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
+              </select>
+            )}
+            <PasswordBox S={S} C={C} buttonLabel="Fiók létrehozása" onSubmit={async pw => {
+              await callStaffFn({ action: "create", email: form.email.trim(), role: form.role, stylistExtId: form.role === "stylist" ? form.stylistExtId : null, password: pw });
+              setForm({ email: "", role: "admin", stylistExtId: "" }); setAdding(false); load();
+            }} />
+            <button style={{...S.btnSec, width:"100%", marginTop:"6px"}} onClick={() => setAdding(false)}>Mégse</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const today = getToday(); // mindig friss
 
@@ -3893,6 +3974,8 @@ function App() {
                   <div style={{fontSize:"11px", color:C.sub, marginBottom:"6px", fontWeight:"700"}}>Saját (admin) jelszó módosítása</div>
                   <PasswordBox S={S} C={C} buttonLabel="Jelszó megváltoztatása" onSubmit={changeOwnPassword} />
                 </div>
+
+                <StaffAccountsBox S={S} C={C} salonId={salonId} stylists={stylists} />
 
                 <div style={S.card}>
                   <span style={S.label}>⚙️ Beállítások</span>
