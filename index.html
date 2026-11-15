@@ -3936,42 +3936,6 @@ function App() {
                   <input type="number" style={S.input} value={settings.depositAmount} onChange={e=>setSettings({...settings, depositAmount:+e.target.value})} />
                 </div>
 
-                <div style={{...S.card, borderColor:C.danger}}>
-                  <span style={{...S.label, color:C.danger}}>⚠️ Teljes újraindítás (vészhelyzet)</span>
-                  <div style={{fontSize:"12px", color:C.textDim, marginBottom:"14px"}}>
-                    MINDENT töröl a böngészőből és visszaállítja az alapadatokat (5 barber PIN-ekkel, alapszolgáltatások). Ezt akkor használd, ha valami nem működik vagy hibás adat van.
-                  </div>
-                  <button style={{...S.btnDanger, width:"100%", background:C.danger, color:"#fff"}} onClick={() => {
-                    if (!confirm("BIZTOSAN újraindítod a rendszert?\n\nMINDEN adat törlődik: foglalások, vendégek, üzenetek. A barberek és szolgáltatások visszaállnak az alapokra.\n\nEz NEM visszavonható.")) return;
-                    if (!confirm("Még egyszer megerősíted? Tényleg végleges.")) return;
-                    localStorage.removeItem("cnf_settings");
-                    localStorage.removeItem("cnf_stylists");
-                    localStorage.removeItem("cnf_services");
-                    localStorage.removeItem("cnf_bookings");
-                    localStorage.removeItem("cnf_clients");
-                    localStorage.removeItem("cnf_notifications");
-                    window.location.reload();
-                  }}>🔄 TELJES ÚJRAINDÍTÁS</button>
-                </div>
-
-                <div style={{...S.card, borderColor:C.danger}}>
-                  <span style={{...S.label, color:C.danger}}>🔄 Alapadatok visszaállítása</span>
-                  <div style={{fontSize:"12px", color:C.textDim, marginBottom:"14px"}}>
-                    Visszaállítja az 5 Cut N' Fade barbert az alapértelmezett email/jelszó kombinációkkal. A vendégadatok és foglalások megmaradnak.
-                  </div>
-                  <button style={{...S.btnSec, width:"100%"}} onClick={() => {
-                    if (!confirm("Visszaállítod a barbereket az alapértelmezett adatokra?")) return;
-                    setStylists([
-                      { id: 1, name: "Lakatos József", title: "Barber", initials: "LJ", color: "#e8d5d5", email: "lakatos@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
-                      { id: 2, name: "Vajó Attila", title: "Barber · Tulajdonos", initials: "VA", color: "#b8dfe0", email: "attila@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
-                      { id: 3, name: "Leskó Balázs", title: "Barber", initials: "LB", color: "#c8e6c8", email: "lesko@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
-                      { id: 4, name: "Fórizs Csaba", title: "Barber", initials: "FC", color: "#d8d8d8", email: "forizs@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
-                      { id: 5, name: "Fejér Koppány", title: "Barber", initials: "FK", color: "#e8c8e0", email: "fejer@cutnfade-nyiregyhaza.hu", hours: CNF_HOURS, vacation: [] },
-                    ]);
-                    showToast("Barberek visszaállítva");
-                  }}>🔄 Barberek visszaállítása</button>
-                </div>
-
                 <div style={{...S.card}}>
                   <span style={S.label}>🎨 Megjelenés · Szín-téma</span>
                   <div style={{fontSize:"12px", color:C.textDim, marginBottom:"14px"}}>
@@ -4037,20 +4001,6 @@ function App() {
                   )}
                 </div>
 
-                <div style={{...S.card, borderColor:C.danger}}>
-                  <span style={{...S.label, color:C.danger}}>🗑 GDPR · Összes vendég törlése</span>
-                  <div style={{fontSize:"12px", color:C.textDim, marginBottom:"14px"}}>
-                    {clients.length} vendég és <strong>minden foglalás</strong> törlése (jövőbeliek is). Ez nem visszavonható.
-                  </div>
-                  <button style={{...S.btnDanger, width:"100%"}} onClick={() => {
-                    if (clients.length === 0) return;
-                    if (!confirm(`BIZTOSAN törölsz MINDEN vendéget (${clients.length} db) és MINDEN foglalást?\n\nEz NEM visszavonható.`)) return;
-                    if (!confirm("Még egyszer megerősíted? Ez tényleg végleges.")) return;
-                    setClients([]);
-                    setBookings([]);
-                    showToast("Minden vendég és foglalás törölve");
-                  }} disabled={clients.length===0}>🗑 Összes vendég + foglalás törlése</button>
-                </div>
               </>
             )}
             </div>
