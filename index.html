@@ -160,6 +160,8 @@ const parseDate = s => {
   date.setHours(0,0,0,0);
   return date;
 };
+// Két letöltött adat azonos-e (felesleges újrarajzolás elkerülésére — telefonon a görgetés akadt tőle)
+const sameJson = (a, b) => { try { return a === b || JSON.stringify(a) === JSON.stringify(b); } catch { return false; } };
 const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
 const load = (key, def) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; } };
 
@@ -862,7 +864,8 @@ function App() {
         if (fresh.length > 0) notifyNewBookings(fresh);
       }
       seenBookingIdsRef.current = new Set(visible.map(b => String(b.id)));
-      setBookings(mergeDownloaded("bookings", visible));
+      const updB = mergeDownloaded("bookings", visible);
+      setBookings(prev => { const next = updB(prev); return sameJson(prev, next) ? prev : next; });
       // Vendég által (a levélben lévő linkkel) lemondott foglalások -> felugró értesítő.
       // Az első körben csak megjegyezzük a legutóbbi lemondás idejét (régiekre ne szóljon).
       try {
@@ -909,7 +912,8 @@ function App() {
       const to = formatDate(addDays(getToday(), 120));
       const { data, error } = await sb.rpc("cnf_busy_slots", { p_salon: salonId, p_from: from, p_to: to });
       if (error) throw error;
-      setBusy(Array.isArray(data) ? data : []);
+      const nb = Array.isArray(data) ? data : [];
+      setBusy(prev => sameJson(prev, nb) ? prev : nb);
     } catch (err) {
       console.error("Foglalt sávok letöltési hiba:", err);
     }
@@ -957,7 +961,8 @@ function App() {
         return;
       }
       clientsLoadedRef.current = true;
-      setClients(mergeDownloaded("clients", downloaded));
+      const updC = mergeDownloaded("clients", downloaded);
+      setClients(prev => { const next = updC(prev); return sameJson(prev, next) ? prev : next; });
     } catch (err) {
       console.error("Vendég szinkron (le) hiba:", err);
     }
@@ -1028,9 +1033,10 @@ function App() {
         return;
       }
       stylistsLoadedRef.current = true;
-      stylistSyncingRef.current = true;
       prevStylistIdsRef.current = new Set(downloaded.map(s => String(s.id)));
       stylistSyncedRef.current = Object.fromEntries(downloaded.map((s, i) => [String(s.id), stylistKey(s, i)]));
+      if (sameJson(stylistsRef.current, downloaded)) return;   // nincs változás: ne rajzoljuk újra (és ne állítsuk a jelzőt)
+      stylistSyncingRef.current = true;
       setStylists(downloaded);
     } catch (err) { console.error("Barber szinkron (le) hiba:", err); }
   }
@@ -1092,8 +1098,9 @@ function App() {
         return;
       }
       servicesLoadedRef.current = true;
-      serviceSyncingRef.current = true;
       prevServiceIdsRef.current = new Set(downloaded.map(s => String(s.id)));
+      if (sameJson(servicesRef.current, downloaded)) return;
+      serviceSyncingRef.current = true;
       setServices(downloaded);
     } catch (err) { console.error("Szolgáltatás szinkron (le) hiba:", err); }
   }
@@ -1143,6 +1150,7 @@ function App() {
         return;
       }
       settingsLoadedRef.current = true;
+      if (sameJson(settingsRef.current, dl)) return;
       settingsSyncingRef.current = true;
       setSettings(dl);
     } catch (err) { console.error("Beállítás szinkron (le) hiba:", err); }
@@ -1954,6 +1962,8 @@ function App() {
         .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
         .hdr-name { white-space: nowrap; }
         .admin-layout { display: flex; gap: 20px; align-items: flex-start; }
+        .day-cal-scroll { max-height: 65vh; }
+        @media (max-width: 900px) { .day-cal-scroll { max-height: calc(100vh - 90px); max-height: calc(100svh - 90px); } }
         .qb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .qb-svc { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
         @media (max-width: 480px) { .qb-grid { grid-template-columns: 1fr; } }
@@ -2935,7 +2945,7 @@ function App() {
                 })()}
 
                 {calView === "day" && (
-                <div className="scroll-x" style={{maxHeight:"65vh", overflowY:"auto", overflowX:"auto", WebkitOverflowScrolling:"touch"}}>
+                <div className="scroll-x day-cal-scroll" style={{overflowY:"auto", overflowX:"auto", WebkitOverflowScrolling:"touch"}}>
                   <div style={{display:"flex", gap: C.isLight ? "10px" : "4px", minWidth: `${(isStylist ? 1 : stylists.length) * 140 + 60}px`}}>   {/* csak a LÁTHATÓ oszlopok (barber: 1) */}
                     {/* Idő oszlop */}
                     <div style={{width:"50px", flexShrink:0, position:"relative"}}>
