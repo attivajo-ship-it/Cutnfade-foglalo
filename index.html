@@ -463,7 +463,10 @@ function NotifyBox({ S, C }) {
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
-      if (sub) { await sb.rpc("cnf_push_unsubscribe", { p_endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
+      if (sub) {
+        try { await sb.rpc("cnf_push_unsubscribe", { p_endpoint: sub.endpoint }); } catch (e) {}
+        await sub.unsubscribe();
+      }
       setOn(false); window.__cnfPushOn = false; setMsg("Kikapcsolva");
     } catch (e) { setMsg("Nem sikerült: " + (e && e.message ? e.message : e)); }
     finally { setBusy(false); }
