@@ -1981,49 +1981,97 @@ function App() {
 
   // Lemondási oldal (a levélben lévő linkről) — a foglaló helyett csak ez jelenik meg
   if (cancelToken) {
-    const box = { maxWidth:"440px", margin:"40px auto", padding:"28px 24px", background:C.surface, border:`1px solid ${C.border}`, borderRadius:"10px", color:C.text, textAlign:"center" };
+    // Lemondó oldal (…/?lemondas=<kód>) — a levelekkel egyező smaragd stílus (2026-11-15)
     const ci = cancelInfo;
     const home = () => { try { window.location.href = window.location.pathname; } catch {} };
+    const phone = settings.phone || "+36 30 011 7800";
+    const tel = <a href={`tel:${phone.replace(/[^+0-9]/g, "")}`} style={{color:C.text, fontWeight:"700", textDecoration:"none", whiteSpace:"nowrap"}}>{phone}</a>;
+    const softBg = C.isLight ? "#e7f4ee" : C.surfaceAlt;
+    const bebas = "'Bebas Neue', Impact, sans-serif";
+    const Icon = ({ ch, bg, fg }) => (
+      <div style={{width:"52px", height:"52px", borderRadius:"50%", background:bg, color:fg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"24px", fontWeight:"800", margin:"0 auto 14px"}}>{ch}</div>
+    );
+    const Title = ({ children }) => <h1 style={{fontFamily:bebas, fontWeight:"400", fontSize:"30px", letterSpacing:"0.04em", lineHeight:1.1, margin:"0 0 8px", color:C.text}}>{children}</h1>;
+    const Text = ({ children }) => <p style={{fontSize:"14px", lineHeight:1.55, color:C.sub, margin:"0 0 6px"}}>{children}</p>;
+    const d = ci && ci.date ? parseDate(ci.date) : null;
+    const weekday = d ? d.toLocaleDateString("hu-HU", { weekday:"long" }) : "";
+    const dateTxt = d ? d.toLocaleDateString("hu-HU", { year:"numeric", month:"long", day:"numeric" }) : "";
     return (
-      <div style={{...S.app, padding:"16px"}}>
-        <div style={box}>
-          <div style={{fontFamily:"'Bebas Neue', Impact, sans-serif", fontSize:"22px", fontWeight: "400", letterSpacing:"0.12em", marginBottom:"18px"}}>CUT N' <em>FADE</em></div>
-          {ci === null && <div style={{color:C.sub}}>Betöltés…</div>}
-          {ci && !ci.found && cancelState !== "done" && (
-            <div style={{fontSize:"14px", color:C.textDim}}>{ci.already ? "Ezt a foglalást már lemondták." : "Ez a lemondási link érvénytelen vagy lejárt."}</div>
-          )}
-          {ci && ci.found && cancelState !== "done" && (
-            <>
-              <div style={{fontSize:"14px", color:C.textDim, marginBottom:"14px"}}>{ci.firstName ? `Kedves ${ci.firstName}, ` : ""}ezt a foglalást szeretnéd lemondani?</div>
-              <div style={{padding:"14px", background:C.surfaceAlt, borderRadius:"8px", marginBottom:"18px", textAlign:"left", fontSize:"14px", lineHeight:1.7}}>
-                <div>📅 <b>{parseDate(ci.date).toLocaleDateString("hu-HU", { year:"numeric", month:"long", day:"numeric", weekday:"long" })}, {ci.time}</b></div>
-                <div>💈 {ci.service}</div>
-                <div>✂️ {ci.stylist}</div>
-              </div>
-              {ci.past ? (
-                <div style={{fontSize:"13px", color:C.sub}}>Ez az időpont már elmúlt.</div>
-              ) : !ci.canCancel ? (
-                <div style={{fontSize:"13px", color:C.danger}}>Az időpont előtt {ci.hoursLimit} órán belül már nem lehet online lemondani. Kérjük, hívj minket.</div>
-              ) : (
-                <>
-                  <button disabled={cancelState === "busy"} onClick={confirmCancel}
-                    style={{...S.btn, width:"100%", padding:"14px", background:C.danger, color:"#fff", opacity: cancelState === "busy" ? 0.6 : 1}}>
-                    {cancelState === "busy" ? "Lemondás…" : "Igen, lemondom az időpontot"}
-                  </button>
-                  <div style={{fontSize:"11px", color:C.sub, marginTop:"10px"}}>Online legkésőbb {ci.hoursLimit} órával az időpont előtt mondhatod le.</div>
-                </>
-              )}
-              {cancelState === "error" && <div style={{fontSize:"13px", color:C.danger, marginTop:"12px"}}>{cancelMsg}</div>}
-            </>
-          )}
-          {cancelState === "done" && (
+      <div style={{...S.app, padding:"24px 16px"}}>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Bebas+Neue&display=swap');`}</style>
+        <div style={{maxWidth:"460px", margin:"0 auto"}}>
+          {/* fejléc */}
+          <div style={{display:"flex", alignItems:"center", gap:"12px", margin:"4px 4px 18px"}}>
+            <div style={{width:"44px", height:"44px", borderRadius:"50%", background:C.accent, color:C.accentText, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:bebas, fontSize:"17px", letterSpacing:"0.05em"}}>CNF</div>
             <div>
-              <div style={{fontSize:"34px", marginBottom:"8px"}}>✓</div>
-              <div style={{fontSize:"15px", fontWeight:"700", marginBottom:"6px"}}>Az időpontot lemondtuk.</div>
-              <div style={{fontSize:"13px", color:C.textDim}}>Köszönjük, hogy szóltál! Bármikor foglalhatsz új időpontot.</div>
+              <div style={{fontFamily:bebas, fontSize:"22px", letterSpacing:"0.14em", lineHeight:1, color:C.text}}>CUT N' FADE</div>
+              <div style={{fontSize:"10px", letterSpacing:"0.2em", color:C.sub, marginTop:"3px"}}>BARBERSHOP · NYÍREGYHÁZA</div>
             </div>
-          )}
-          <button onClick={home} style={{...S.btnSec, marginTop:"22px", fontSize:"12px"}}>Új időpont foglalása</button>
+          </div>
+
+          <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:"14px", padding:"28px 24px", textAlign:"center"}}>
+            {ci === null && <div style={{color:C.sub, padding:"20px 0"}}>Betöltés…</div>}
+
+            {ci && !ci.found && cancelState !== "done" && (
+              <>
+                <Icon ch="i" bg={C.surfaceAlt} fg={C.sub} />
+                <Title>{ci.already ? "Már lemondva" : "A link nem érvényes"}</Title>
+                <Text>{ci.already ? "Ezt a foglalást már lemondták, nincs vele több teendőd." : "Ez a lemondási link érvénytelen vagy lejárt. Lehet, hogy a foglalást közben törölték."}</Text>
+                <Text>Kérdésed van? Hívj minket: {tel}</Text>
+              </>
+            )}
+
+            {ci && ci.found && cancelState !== "done" && (
+              <>
+                <Icon ch="?" bg={softBg} fg={C.accent} />
+                <Title>Lemondod az időpontot?</Title>
+                <Text>{ci.firstName ? `Kedves ${ci.firstName}, ` : ""}ez a foglalásod:</Text>
+                <div style={{background:softBg, borderRadius:"10px", padding:"16px 18px", margin:"14px 0 18px", textAlign:"left"}}>
+                  <div style={{fontSize:"11px", fontWeight:"700", letterSpacing:"0.16em", color:C.accent, textTransform:"uppercase"}}>{weekday}</div>
+                  <div style={{fontFamily:bebas, fontSize:"28px", letterSpacing:"0.04em", lineHeight:1.1, color:C.text}}>{dateTxt}</div>
+                  <div style={{fontFamily:bebas, fontSize:"28px", letterSpacing:"0.04em", lineHeight:1.1, color:C.accent}}>{ci.time}</div>
+                  <div style={{borderTop:`1px solid ${C.border}`, marginTop:"10px", paddingTop:"10px", fontSize:"14px", lineHeight:1.7, color:C.text}}>
+                    <div><span style={{color:C.sub, display:"inline-block", width:"100px"}}>Szolgáltatás</span><b>{ci.service}</b></div>
+                    <div><span style={{color:C.sub, display:"inline-block", width:"100px"}}>Barber</span><b>{ci.stylist}</b></div>
+                  </div>
+                </div>
+                {ci.past ? (
+                  <Text>Ez az időpont már elmúlt.</Text>
+                ) : !ci.canCancel ? (
+                  <div style={{background:"#fdf3e3", border:"1px solid #f2d39b", borderRadius:"10px", padding:"12px 14px", fontSize:"13px", lineHeight:1.55, color:"#7a5310", textAlign:"left"}}>
+                    ⚠ Az időpont előtt {ci.hoursLimit} órán belül már nem lehet online lemondani. Kérjük, hívj minket: {tel}
+                  </div>
+                ) : (
+                  <>
+                    <button disabled={cancelState === "busy"} onClick={confirmCancel}
+                      style={{...S.btn, width:"100%", padding:"14px", background:C.danger, color:"#fff", borderRadius:"10px", opacity: cancelState === "busy" ? 0.6 : 1}}>
+                      {cancelState === "busy" ? "Lemondás…" : "Igen, lemondom"}
+                    </button>
+                    <button onClick={home} style={{...S.btnSec, width:"100%", padding:"13px", marginTop:"8px", borderRadius:"10px", fontSize:"13px"}}>Mégsem, megtartom az időpontot</button>
+                    <div style={{fontSize:"11px", color:C.muted, marginTop:"12px"}}>Online legkésőbb {ci.hoursLimit} órával az időpont előtt mondhatod le.</div>
+                  </>
+                )}
+                {cancelState === "error" && <div style={{fontSize:"13px", color:C.danger, marginTop:"12px"}}>{cancelMsg}</div>}
+              </>
+            )}
+
+            {cancelState === "done" && (
+              <>
+                <Icon ch="✓" bg={softBg} fg={C.accent} />
+                <Title>Az időpontot lemondtuk</Title>
+                <Text>Köszönjük, hogy szóltál! Így másnak adhatjuk oda az időpontot.</Text>
+                <Text>Bármikor foglalhatsz újat — várunk szeretettel.</Text>
+              </>
+            )}
+
+            {(cancelState === "done" || (ci && (!ci.found || ci.past || !ci.canCancel))) && (
+              <button onClick={home} style={{...S.btn, width:"100%", padding:"14px", marginTop:"18px", borderRadius:"10px"}}>Új időpont foglalása</button>
+            )}
+          </div>
+
+          <div style={{textAlign:"center", fontSize:"12px", color:C.sub, marginTop:"16px", lineHeight:1.7}}>
+            {settings.address || "Zrínyi Ilona u. 8-10., 4400 Nyíregyháza"}<br />{tel}
+          </div>
         </div>
       </div>
     );
