@@ -8,6 +8,23 @@
   <!-- PRÓBAIDŐSZAK: a keresők ne vegyék fel az oldalt. Élesítéskor TÖRÖLD ezt a sort. -->
   <meta name="robots" content="noindex, nofollow" />
   <title>Cut N' Fade · Foglalás</title>
+  <!-- Telepíthető webapp (PWA): ezek a fájlok a pwa/ mappából, az index.html MELLÉ kerülnek fel a GitHubra -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Cut N' Fade" />
+  <script>
+    // Telepítési lehetőség elkapása (Android/Chrome/Edge) — az app „📲 App telepítése” gombja használja
+    window.__cnfInstall = null;
+    window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); window.__cnfInstall = e; window.dispatchEvent(new Event("cnf-installable")); });
+    window.addEventListener("appinstalled", function () { window.__cnfInstall = null; window.dispatchEvent(new Event("cnf-installable")); });
+    if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+      window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function (err) { console.warn("SW:", err); }); });
+    }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <style>
@@ -344,6 +361,53 @@ function WorkDaysCalendar({ S, C, stylist, onSave }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// „📲 App telepítése” doboz az admin menüben. Androidon/Chrome-on/Edge-en egy gomb (beforeinstallprompt,
+// a template.html kapja el), iPhone-on rövid útmutató (ott csak a Safari Megosztás menüjéből lehet).
+// Telepített appban (standalone) és elrejtés után nem látszik.
+function InstallAppBox({ S, C }) {
+  const standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  const [can, setCan] = React.useState(!!window.__cnfInstall);
+  const [hidden, setHidden] = React.useState(() => { try { return localStorage.getItem("cnf_install_hide") === "1"; } catch { return false; } });
+  const [iosHelp, setIosHelp] = React.useState(false);
+  React.useEffect(() => {
+    const f = () => setCan(!!window.__cnfInstall);
+    window.addEventListener("cnf-installable", f);
+    return () => window.removeEventListener("cnf-installable", f);
+  }, []);
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (standalone || hidden || (!can && !ios)) return null;
+  const hide = () => { try { localStorage.setItem("cnf_install_hide", "1"); } catch {} setHidden(true); };
+  const install = async () => {
+    const ev = window.__cnfInstall; if (!ev) return;
+    ev.prompt();
+    try { await ev.userChoice; } catch {}
+    window.__cnfInstall = null; setCan(false);
+  };
+  return (
+    <div className="admin-install" style={{border:`1px solid ${C.border}`, borderRadius:"8px", padding:"10px", margin:"8px 0", background:C.surface}}>
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:"6px"}}>
+        <span style={{fontSize:"12px", fontWeight:"700"}}>📲 App a telefonra</span>
+        <button onClick={hide} aria-label="Elrejtés" style={{background:"none", border:"none", color:C.sub, cursor:"pointer", fontSize:"12px"}}>✕</button>
+      </div>
+      {can ? (
+        <button onClick={install} style={{...S.btn, width:"100%", padding:"9px 10px", fontSize:"12px", marginTop:"6px"}}>App telepítése</button>
+      ) : (
+        <>
+          <button onClick={() => setIosHelp(v => !v)} style={{...S.btnSec, width:"100%", fontSize:"12px", marginTop:"6px"}}>Hogyan telepítsem?</button>
+          {iosHelp && (
+            <ol style={{fontSize:"11px", color:C.sub, margin:"8px 0 0 16px", lineHeight:1.6}}>
+              <li>Nyisd meg ezt az oldalt <b>Safariban</b>.</li>
+              <li>Koppints alul a <b>Megosztás</b> gombra (négyzet felfelé nyíllal).</li>
+              <li>Válaszd: <b>Főképernyőhöz adás</b>, majd <b>Hozzáadás</b>.</li>
+            </ol>
+          )}
+        </>
+      )}
+      <div style={{fontSize:"10px", color:C.muted, marginTop:"6px"}}>Saját ikon a kezdőképernyőn, teljes képernyőn nyílik.</div>
     </div>
   );
 }
@@ -2544,6 +2608,7 @@ function App() {
                 ));
               })()}
             </nav>
+            <InstallAppBox S={S} C={C} />
             <button className="admin-side-logout" style={{...S.btnSec, width:"100%"}} onClick={logout}>🔓 Kijelentkezés</button>
             </aside>
 
