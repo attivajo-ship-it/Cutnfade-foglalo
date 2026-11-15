@@ -2936,7 +2936,7 @@ function App() {
 
                 {calView === "day" && (
                 <div className="scroll-x" style={{maxHeight:"65vh", overflowY:"auto", overflowX:"auto", WebkitOverflowScrolling:"touch"}}>
-                  <div style={{display:"flex", gap: C.isLight ? "10px" : "4px", minWidth: `${stylists.length * 140 + 60}px`}}>
+                  <div style={{display:"flex", gap: C.isLight ? "10px" : "4px", minWidth: `${(isStylist ? 1 : stylists.length) * 140 + 60}px`}}>   {/* csak a LÁTHATÓ oszlopok (barber: 1) */}
                     {/* Idő oszlop */}
                     <div style={{width:"50px", flexShrink:0, position:"relative"}}>
                       <div style={{height:"60px", position:"sticky", top:0, zIndex:6, background:C.surface}}></div>
