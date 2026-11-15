@@ -1468,6 +1468,39 @@ function App() {
     });
   }
 
+  // ===== HÉZAGMENTES IDŐPONTKÍNÁLAT (2026-11-15, „okos” mód) =====
+  // A vendég nem kap olyan kezdést, ami a foglalás előtt vagy után a legrövidebb szolgáltatásnál
+  // rövidebb (használhatatlan) rést hagyna a barber napjában. Akadály: foglalás, elfoglaltság, ebédszünet,
+  // a műszak eleje/vége. Ha a szűrés MINDEN szabad időpontot kivenne, a szűretlen lista marad (ne vesszen el foglalás).
+  // Csak a vendég oldalon; admin/recepció bárhova foglalhat. Kikapcsolás: settings.gapFree = false.
+  function gapOk(stylistId, dateStr, time, dur, minGap) {
+    const h = getStylistHours(stylistId, dateStr);
+    if (!h || h.off || !h.open || !h.close) return true;
+    const st = stylists.find(x => x.id === stylistId);
+    const obst = [];
+    const occupied = staffMode ? bookings : busy;
+    for (const b of occupied) if (b.date === dateStr && b.stylistId === stylistId) { const t0 = timeToMinutes(b.time); obst.push([t0, t0 + (b.duration || 15)]); }
+    for (const b of (st?.blocks || [])) if (b.date === dateStr && b.from && b.to) obst.push([timeToMinutes(b.from), timeToMinutes(b.to)]);
+    if (st?.lunchBreak?.enabled && st.lunchBreak.from && st.lunchBreak.to) obst.push([timeToMinutes(st.lunchBreak.from), timeToMinutes(st.lunchBreak.to)]);
+    const s0 = timeToMinutes(time), e0 = s0 + dur;
+    let L = timeToMinutes(h.open), R = timeToMinutes(h.close);
+    for (const [a, b] of obst) { if (b <= s0 && b > L) L = b; if (a >= e0 && a < R) R = a; }
+    // Ma: a már elmúlt idő előtti rés nem számít (azt úgysem lehet kiadni)
+    if (dateStr === formatDate(today)) { const nowMin = now.getHours() * 60 + now.getMinutes(); if (L < nowMin) L = s0; }
+    const before = s0 - L, after = R - e0;
+    return !((before > 0 && before < minGap) || (after > 0 && after < minGap));
+  }
+  function guestFreeTimes(stylistId, dateStr, dur) {
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const isToday = dateStr === formatDate(today);
+    const free = guestSlotList(stylistId, dateStr).filter(t => isSlotAvailable(stylistId, dateStr, t, dur) && !(isToday && timeToMinutes(t) <= nowMin));
+    if (settings.gapFree === false || !free.length) return new Set(free);
+    const durs = getStylistServices(stylistId).map(x => Number(x.duration) || 0).filter(x => x > 0);
+    const minGap = durs.length ? Math.min(...durs) : 30;
+    const tight = free.filter(t => gapOk(stylistId, dateStr, t, dur, minGap));
+    return new Set(tight.length ? tight : free);
+  }
+
   function getClientStatus(phone) {
     const c = clients.find(cl => cl.phone === phone);
     if (!c) return { level: "ok", noShow: 0, blocked: false, manualBlock: false };
@@ -2646,21 +2679,16 @@ function App() {
               {(() => {
                 // Világos téma: csak a SZABAD időpontok látszanak (a foglaltak csak zavarnak)
                 const svc0 = getStylistService(form.stylist, form.service);
-                const nowMin0 = now.getHours()*60 + now.getMinutes();
-                const freeCount = guestSlotList(form.stylist, selectedDate).filter(h => isSlotAvailable(form.stylist, selectedDate, h, svc0?.duration || 30)
-                  && !(selectedDate === formatDate(today) && timeToMinutes(h) <= nowMin0)).length;
+                const freeCount = guestFreeTimes(form.stylist, selectedDate, svc0?.duration || 30).size;
                 return C.isLight && freeCount === 0 ? (
                   <div style={{fontSize:"13px", color:C.sub, padding:"10px 2px"}}>Erre a napra nincs szabad időpont ennél a barbernél. Válassz másik napot vagy barbert.</div>
                 ) : null;
               })()}
               <div style={{display:"grid", gridTemplateColumns: C.isLight ? "repeat(auto-fill, minmax(72px, 1fr))" : "repeat(auto-fill, minmax(60px, 1fr))", gap: C.isLight ? "8px" : "4px"}}>
-                {guestSlotList(form.stylist, selectedDate).map(h => {
-                  const svc = getStylistService(form.stylist, form.service);
-                  const duration = svc?.duration || 30;
-                  // Múltbeli időpont? (ha a kiválasztott nap MA van és az idő már elmúlt)
-                  const nowMin = now.getHours()*60 + now.getMinutes();
-                  const isPast = selectedDate === formatDate(today) && timeToMinutes(h) <= nowMin;
-                  const available = isSlotAvailable(form.stylist, selectedDate, h, duration) && !isPast;
+                {(() => { const svcG = getStylistService(form.stylist, form.service); const freeG = guestFreeTimes(form.stylist, selectedDate, svcG?.duration || 30);
+                  return guestSlotList(form.stylist, selectedDate).map(h => {
+                  // Szabad, nem múltbeli, és nem hagy használhatatlan rést (hézagmentes kínálat)
+                  const available = freeG.has(h);
                   const active = form.time === h;
                   if (C.isLight && !available) return null;
                   if (C.isLight) return (
@@ -2684,7 +2712,7 @@ function App() {
                       {h}
                     </button>
                   );
-                })}
+                }); })()}
               </div>
             </div>
             )}
@@ -4021,6 +4049,19 @@ function App() {
                 </div>
 
                 <StaffAccountsBox S={S} C={C} salonId={salonId} stylists={stylists} />
+
+                <div style={S.card}>
+                  <span style={S.label}>🧩 Hézagmentes időpontkínálat</span>
+                  <label style={{display:"flex", alignItems:"center", gap:"10px", fontSize:"14px", cursor:"pointer", marginBottom:"8px"}}>
+                    <input type="checkbox" checked={settings.gapFree !== false} onChange={e=>setSettings({...settings, gapFree: e.target.checked})} />
+                    Bekapcsolva
+                  </label>
+                  <div style={{fontSize:"12px", color:C.textDim, lineHeight:1.5}}>
+                    Online a vendég nem kap olyan időpontot, ami a barber napjában a legrövidebb szolgáltatásnál rövidebb
+                    (kiadhatatlan) rést hagyna egy foglalás, elfoglaltság vagy a műszak széle mellett. Ha így nem maradna szabad időpont,
+                    mindent mutat. A naptárból (admin, recepció) továbbra is bárhova lehet foglalni.
+                  </div>
+                </div>
 
                 <div style={S.card}>
                   <span style={S.label}>⭐ Értékelés-kérő levél</span>
