@@ -515,6 +515,49 @@ function PasswordBox({ S, C, onSubmit, buttonLabel = "Jelszó mentése", hint })
   );
 }
 
+// Admin → Beállítás: okos visszahívás kapcsoló + előnézet (cnf_recall_preview)
+function RecallBox({ S, C, settings, setSettings }) {
+  const [pv, setPv] = React.useState(null);
+  const [err, setErr] = React.useState("");
+  const load = React.useCallback(async () => {
+    if (!sb) return;
+    setErr("");
+    const { data, error } = await sb.rpc("cnf_recall_preview");
+    if (error || !data || !data.ok) { setErr("Az előnézet nem tölthető be."); return; }
+    setPv(data);
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+  const on = settings.recallEnabled === true;
+  return (
+    <div style={S.card}>
+      <span style={S.label}>🔁 Okos visszahívás („elmaradó vendég”)</span>
+      <label style={{display:"flex", alignItems:"center", gap:"10px", fontSize:"14px", cursor:"pointer", marginBottom:"8px"}}>
+        <input type="checkbox" checked={on} onChange={e=>{
+          if (e.target.checked && !confirm("Bekapcsolod? Naponta délelőtt megy ki a levél azoknak, akik a szokásos ritmusukhoz képest elmaradtak.")) return;
+          setSettings({...settings, recallEnabled: e.target.checked});
+        }} />
+        Bekapcsolva
+      </label>
+      <div style={{fontSize:"12px", color:C.textDim, lineHeight:1.5, marginBottom:"10px"}}>
+        „Ideje egy friss vágásnak?” levél foglaló gombbal (a vendég barberénél). Ritmus: a vendég átlagos visszajárása + 10 nap;
+        egy látogatásnál 6 hét. Nem kapja, akinek van jövőbeli foglalása, aki leiratkozott, vagy akinek 60 napon belül már ment.
+        Naponta 10 óra körül fut.
+      </div>
+      <div style={{fontSize:"12px", padding:"10px 12px", borderRadius:"8px", background:C.surfaceAlt || C.bg, border:`1px solid ${C.border}`}}>
+        {err ? <span style={{color:C.danger}}>{err}</span> : !pv ? "Előnézet betöltése…" : (
+          <>
+            <div><strong>Most kapna levelet:</strong> {pv.online} vendég (a saját foglalóból)
+              {pv.withImported !== pv.online && <> · BWnet-előzményekkel együtt: {pv.withImported}</>}</div>
+            {pv.sample && pv.sample.length > 0 && <div style={{color:C.sub, marginTop:"4px"}}>Pl.: {pv.sample.join(", ")}</div>}
+            <div style={{color:C.muted, marginTop:"4px"}}>A BWnet-előzmények az átállásig nem számítanak (mint az emlékeztetőnél).</div>
+          </>
+        )}
+        <button style={{...S.btnSec, padding:"5px 10px", fontSize:"11px", marginTop:"8px"}} onClick={load}>↻ Frissítés</button>
+      </div>
+    </div>
+  );
+}
+
 // Admin → Beállítás: belépési fiókok listája, jelszó beállítása bárkinek, új fiók létrehozása (staff-password).
 async function callStaffFn(body) {
   const { data, error } = await sb.functions.invoke("staff-password", { body });
@@ -684,6 +727,26 @@ function App() {
   const [showDayClose, setShowDayClose] = React.useState(false);
   const [form, setForm] = React.useState({ name:"", phone:"", email:"", service:null, stylist:null, time:"", note:"" });
   const [bookingDone, setBookingDone] = React.useState(false);
+  // Előkitöltés linkből (visszahívó / várólista levél): ?b=<barber id>&d=YYYY-MM-DD&t=HH:MM&s=<szolgáltatás id>
+  React.useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const b = q.get("b"), d = q.get("d"), t = q.get("t"), sv = q.get("s");
+      if (!b && !d) return;
+      const patch = {};
+      if (/^\d+$/.test(b || "")) patch.stylist = Number(b);
+      if (/^\d+$/.test(sv || "")) patch.service = Number(sv);
+      if (/^\d{2}:\d{2}$/.test(t || "")) patch.time = t;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d || "") && d >= formatDate(getToday())) {
+        setSelectedDate(d);
+        setCalOffset(Math.floor(Math.round((parseDate(d) - getToday()) / 86400000) / 7));
+      }
+      setForm(f => ({ ...f, ...patch }));
+      ["b", "d", "t", "s"].forEach(k => q.delete(k));
+      const rest = q.toString();
+      window.history.replaceState(null, "", window.location.pathname + (rest ? "?" + rest : ""));
+    } catch {}
+  }, []);
   const [loginEmail, setLoginEmail] = React.useState("");
   const [loginPassword, setLoginPassword] = React.useState("");
   const [authRole, setAuthRole] = React.useState(() => { try { return localStorage.getItem("cnf_authRole") || null; } catch { return null; } });
@@ -4062,6 +4125,8 @@ function App() {
                     mindent mutat. A naptárból (admin, recepció) továbbra is bárhova lehet foglalni.
                   </div>
                 </div>
+
+                <RecallBox S={S} C={C} settings={settings} setSettings={setSettings} />
 
                 <div style={S.card}>
                   <span style={S.label}>⭐ Értékelés-kérő levél</span>
