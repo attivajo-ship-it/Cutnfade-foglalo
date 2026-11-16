@@ -515,6 +515,124 @@ function PasswordBox({ S, C, onSubmit, buttonLabel = "Jelszó mentése", hint })
   );
 }
 
+// Vendég oldal: várólista feliratkozás (cnf_waitlist_add) — ha nincs megfelelő időpont
+function WaitlistBox({ S, C, lang, salonId, date, stylist, service, defaults }) {
+  const hu = lang === "hu";
+  const [open, setOpen] = React.useState(false);
+  const [part, setPart] = React.useState("all");
+  const [anyone, setAnyone] = React.useState(false);
+  const [f, setF] = React.useState({ name: "", phone: "", email: "" });
+  const [state, setState] = React.useState("idle"); // idle | busy | done
+  const [msg, setMsg] = React.useState("");
+  React.useEffect(() => { setState("idle"); setMsg(""); }, [date, stylist && stylist.id, service && service.id]);
+  if (!stylist || !service || !sb || !salonId) return null;
+  const openForm = () => { setF({ name: defaults.name || "", phone: defaults.phone || "", email: defaults.email || "" }); setOpen(true); };
+  const d = parseDate(date);
+  const dTxt = d ? d.toLocaleDateString(hu ? "hu-HU" : "en-GB", { month: "long", day: "numeric", weekday: "long" }) : date;
+  async function submit() {
+    setMsg("");
+    if (f.name.trim().length < 2) { setMsg(hu ? "Add meg a neved." : "Please enter your name."); return; }
+    if (f.phone.replace(/\D/g, "").length < 9) { setMsg(hu ? "Add meg a telefonszámod." : "Please enter your phone number."); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) { setMsg(hu ? "Add meg az email címed — ide küldjük az értesítést." : "Please enter your email."); return; }
+    setState("busy");
+    try {
+      const { data, error } = await sb.rpc("cnf_waitlist_add", { p_salon: salonId, p: {
+        name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), date,
+        stylistId: anyone ? "" : String(stylist.id), serviceId: String(service.id), daypart: part } });
+      if (error || !data || !data.ok) {
+        const e = data && data.error;
+        setMsg(e === "limit_phone" ? (hu ? "Legfeljebb 3 várólistán lehetsz egyszerre." : "You can be on at most 3 waiting lists.")
+          : e === "limit_rate" ? (hu ? "Most túl sok a feliratkozás, próbáld később." : "Too many requests, try later.")
+          : (hu ? "Nem sikerült, ellenőrizd az adatokat." : "Something went wrong, please check your details."));
+        setState("idle"); return;
+      }
+      setState("done"); setOpen(false);
+    } catch (e) { setMsg(hu ? "Nem sikerült, próbáld újra." : "Failed, please try again."); setState("idle"); }
+  }
+  const chip = (on) => ({ padding:"8px 12px", borderRadius:"999px", border:`1px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.surface,
+    color: on ? C.accentText : C.text, fontSize:"13px", fontWeight:600, cursor:"pointer", fontFamily:"inherit" });
+  if (state === "done") return (
+    <div style={{...S.card, borderColor: C.accent}}>
+      <div style={{fontSize:"14px", fontWeight:700, marginBottom:"4px"}}>🔔 {hu ? "Feliratkoztál a várólistára" : "You're on the waiting list"}</div>
+      <div style={{fontSize:"13px", color:C.sub, lineHeight:1.5}}>{hu
+        ? `Ha ${dTxt} felszabadul egy megfelelő időpont, emailt küldünk egy gombbal, amivel egyből lefoglalhatod. Aki előbb foglal, azé.`
+        : `If a suitable slot opens up on ${dTxt}, we'll email you a link to book it. First come, first served.`}</div>
+    </div>
+  );
+  return (
+    <div style={S.card}>
+      {!open ? (
+        <div style={{display:"flex", alignItems:"center", gap:"10px", flexWrap:"wrap"}}>
+          <div style={{flex:"1 1 200px", fontSize:"13px", color:C.sub}}>{hu ? "Nincs megfelelő időpont ezen a napon?" : "No suitable time on this day?"}</div>
+          <button style={{...S.btnSec, padding:"9px 14px", fontSize:"13px"}} onClick={openForm}>🔔 {hu ? "Szólj, ha felszabadul hely" : "Notify me if a slot opens"}</button>
+        </div>
+      ) : (
+        <div>
+          <div style={{fontSize:"14px", fontWeight:700, marginBottom:"4px"}}>🔔 {hu ? "Várólista" : "Waiting list"} · {dTxt}</div>
+          <div style={{fontSize:"12px", color:C.sub, marginBottom:"10px", lineHeight:1.5}}>{hu
+            ? `${service.name}. Ha felszabadul egy hely, emailt kapsz — aki előbb foglal, azé.`
+            : `${service.name}. We'll email you when a slot opens — first come, first served.`}</div>
+          <div style={{display:"flex", gap:"6px", flexWrap:"wrap", marginBottom:"8px"}}>
+            <button style={chip(!anyone)} onClick={() => setAnyone(false)}>{stylist.name}</button>
+            <button style={chip(anyone)} onClick={() => setAnyone(true)}>{hu ? "Bármelyik barber" : "Any barber"}</button>
+          </div>
+          <div style={{display:"flex", gap:"6px", flexWrap:"wrap", marginBottom:"10px"}}>
+            {[["all", hu ? "Egész nap" : "All day"], ["am", hu ? "Délelőtt" : "Morning"], ["pm", hu ? "Délután" : "Afternoon"]].map(([k, l]) =>
+              <button key={k} style={chip(part === k)} onClick={() => setPart(k)}>{l}</button>)}
+          </div>
+          <input style={{...S.input, marginBottom:"6px"}} autoComplete="name" placeholder={hu ? "Név" : "Name"} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} />
+          <input style={{...S.input, marginBottom:"6px"}} type="tel" autoComplete="tel" placeholder={hu ? "Telefonszám" : "Phone"} value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} />
+          <input style={{...S.input, marginBottom:"8px"}} type="email" autoComplete="email" placeholder="Email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} />
+          {msg && <div style={{fontSize:"12px", color:C.danger, marginBottom:"8px"}}>{msg}</div>}
+          <div style={{display:"flex", gap:"8px"}}>
+            <button style={{...S.btn, flex:1}} disabled={state === "busy"} onClick={submit}>{state === "busy" ? "…" : (hu ? "Feliratkozom" : "Sign me up")}</button>
+            <button style={{...S.btnSec, flex:"0 0 auto"}} onClick={() => setOpen(false)}>{hu ? "Mégse" : "Cancel"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Admin naptár: várólista a kiválasztott napra (waitlist tábla, munkatársi RLS)
+function AdminWaitlist({ S, C, salonId, date, stylists, services, onlyStylistId }) {
+  const [rows, setRows] = React.useState([]);
+  const [open, setOpen] = React.useState(false);
+  const load = React.useCallback(async () => {
+    if (!sb || !salonId) return;
+    const { data } = await sb.from("waitlist").select("id, date, stylist_ext_id, service_ext_id, daypart, name, phone, email, notified_at, notify_count, created_at")
+      .eq("salon_id", salonId).eq("date", date).is("closed_at", null).order("created_at");
+    setRows((data || []).filter(r => !onlyStylistId || !r.stylist_ext_id || String(r.stylist_ext_id) === String(onlyStylistId)));
+  }, [salonId, date, onlyStylistId]);
+  React.useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, [load]);
+  if (!rows.length) return null;
+  const stName = id => id ? ((stylists.find(s => String(s.id) === String(id)) || {}).name || "?") : "Bárki";
+  const svName = id => (services.find(s => String(s.id) === String(id)) || {}).name || "";
+  const partName = { all: "egész nap", am: "délelőtt", pm: "délután" };
+  async function close(id) {
+    if (!confirm("Törlöd a várólistáról?")) return;
+    await sb.from("waitlist").update({ closed_at: new Date().toISOString(), closed_reason: "törölve (admin)" }).eq("id", id);
+    load();
+  }
+  return (
+    <div style={{...S.card, padding:"10px 14px", marginBottom:"10px"}}>
+      <button onClick={() => setOpen(o => !o)} style={{background:"none", border:"none", padding:0, cursor:"pointer", fontFamily:"inherit", fontSize:"13px", fontWeight:700, color:C.text}}>
+        ⏳ Várólista erre a napra: {rows.length} fő {open ? "▴" : "▾"}
+      </button>
+      {open && rows.map(r => (
+        <div key={r.id} style={{display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap", borderTop:`1px solid ${C.border}`, padding:"8px 0", fontSize:"12px"}}>
+          <div style={{flex:"1 1 200px", minWidth:0}}>
+            <div style={{fontWeight:700, fontSize:"13px"}}>{r.name} <a href={`tel:${r.phone}`} style={{color:C.accent, fontWeight:600, textDecoration:"none"}}>{r.phone}</a></div>
+            <div style={{color:C.sub}}>{stName(r.stylist_ext_id)} · {partName[r.daypart] || r.daypart} · {svName(r.service_ext_id)}
+              {r.notify_count > 0 ? ` · értesítve ${r.notify_count}×` : ""}</div>
+          </div>
+          <button style={{...S.btnSec, padding:"5px 10px", fontSize:"11px"}} onClick={() => close(r.id)}>Törlés</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Admin → Beállítás: okos visszahívás kapcsoló + előnézet (cnf_recall_preview)
 function RecallBox({ S, C, settings, setSettings }) {
   const [pv, setPv] = React.useState(null);
@@ -822,6 +940,7 @@ function App() {
   // Leiratkozás az értékelés-kérő levelekről (…/?leiratkozas=<kód>, 2026-11-15)
   const [optoutToken] = React.useState(() => { try { return new URLSearchParams(window.location.search).get("leiratkozas") || ""; } catch { return ""; } });
   const [optoutState, setOptoutState] = React.useState("ask"); // ask | busy | done | bad
+  const [wlToken] = React.useState(() => { try { return new URLSearchParams(window.location.search).get("varolista_le") || ""; } catch { return ""; } });
   const [cancelInfo, setCancelInfo] = React.useState(null);     // null = töltés
   const [cancelState, setCancelState] = React.useState("idle"); // idle | busy | done | error
   const [cancelMsg, setCancelMsg] = React.useState("");
@@ -1553,6 +1672,10 @@ function App() {
     const before = s0 - L, after = R - e0;
     return !((before > 0 && before < minGap) || (after > 0 && after < minGap));
   }
+  function guestSlotOk(stylistId, dateStr, t, dur) {
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    return isSlotAvailable(stylistId, dateStr, t, dur) && !(dateStr === formatDate(today) && timeToMinutes(t) <= nowMin);
+  }
   function guestFreeTimes(stylistId, dateStr, dur) {
     const nowMin = now.getHours() * 60 + now.getMinutes();
     const isToday = dateStr === formatDate(today);
@@ -2163,13 +2286,15 @@ function App() {
   const unreadNotif = notifications.filter(n => !n.read).length;
 
   // Leiratkozó oldal (értékelés-kérő levél alján) — gombnyomásra iratkozik le (a levélszűrők ne tegyék meg helyette)
-  if (optoutToken) {
+  if (optoutToken || wlToken) {
+    const isWl = !!wlToken && !optoutToken;
     const bebas = "'Bebas Neue', Impact, sans-serif";
     const doOptout = async () => {
-      if (!sb || !/^[0-9a-f-]{36}$/i.test(optoutToken)) { setOptoutState("bad"); return; }
+      const tok = isWl ? wlToken : optoutToken;
+      if (!sb || !/^[0-9a-f-]{36}$/i.test(tok)) { setOptoutState("bad"); return; }
       setOptoutState("busy");
       try {
-        const { data, error } = await sb.rpc("cnf_review_optout", { p_token: optoutToken });
+        const { data, error } = isWl ? await sb.rpc("cnf_waitlist_cancel", { p_token: tok }) : await sb.rpc("cnf_review_optout", { p_token: tok });
         setOptoutState(!error && data && data.ok ? "done" : "bad");
       } catch (e) { setOptoutState("bad"); }
     };
@@ -2190,9 +2315,13 @@ function App() {
               {optoutState === "done" ? "Leiratkoztál" : optoutState === "bad" ? "Nem sikerült" : "Leiratkozás"}
             </h1>
             <p style={{fontSize:"14px", lineHeight:1.55, color:C.sub, margin:"0 0 18px"}}>
-              {optoutState === "done" ? "Több értékelés-kérő levelet nem küldünk. A foglalásaidról szóló leveleket (visszaigazolás, emlékeztető) továbbra is megkapod."
+              {isWl
+                ? (optoutState === "done" ? "Levettünk a várólistáról, erről a napról több levelet nem küldünk."
+                  : optoutState === "bad" ? "Ez a várólista már lezárult (lejárt, vagy már foglaltál), nincs teendőd."
+                  : "Leiratkozol erről a várólistáról? Ha felszabadul egy hely, nem küldünk róla levelet.")
+                : optoutState === "done" ? "Több értékelés-kérő és visszahívó levelet nem küldünk. A foglalásaidról szóló leveleket (visszaigazolás, emlékeztető) továbbra is megkapod."
                 : optoutState === "bad" ? "Ez a link már nem érvényes. Ha nem szeretnél tőlünk ilyen levelet, válaszolj a levélre, és intézzük."
-                : "Nem szeretnél több értékelés-kérő levelet kapni tőlünk? A foglalásaidról szóló leveleket továbbra is megkapod."}
+                : "Nem szeretnél több értékelés-kérő és „ideje egy vágásnak” levelet kapni tőlünk? A foglalásaidról szóló leveleket továbbra is megkapod."}
             </p>
             {(optoutState === "ask" || optoutState === "busy") && (
               <button style={{...S.btn, width:"100%", marginBottom:"8px"}} disabled={optoutState === "busy"} onClick={doOptout}>{optoutState === "busy" ? "Egy pillanat…" : "Igen, leiratkozom"}</button>
@@ -2750,8 +2879,9 @@ function App() {
               <div style={{display:"grid", gridTemplateColumns: C.isLight ? "repeat(auto-fill, minmax(72px, 1fr))" : "repeat(auto-fill, minmax(60px, 1fr))", gap: C.isLight ? "8px" : "4px"}}>
                 {(() => { const svcG = getStylistService(form.stylist, form.service); const freeG = guestFreeTimes(form.stylist, selectedDate, svcG?.duration || 30);
                   return guestSlotList(form.stylist, selectedDate).map(h => {
-                  // Szabad, nem múltbeli, és nem hagy használhatatlan rést (hézagmentes kínálat)
-                  const available = freeG.has(h);
+                  // Szabad, nem múltbeli, és nem hagy használhatatlan rést (hézagmentes kínálat);
+                  // a linkből (várólista-levél) érkező időpont akkor is látszik, ha a rés-szűrő elrejtené
+                  const available = freeG.has(h) || (h === form.time && guestSlotOk(form.stylist, selectedDate, h, svcG?.duration || 30));
                   const active = form.time === h;
                   if (C.isLight && !available) return null;
                   if (C.isLight) return (
@@ -2778,6 +2908,12 @@ function App() {
                 }); })()}
               </div>
             </div>
+            )}
+
+            {form.stylist && form.service && (
+              <WaitlistBox S={S} C={C} lang={lang} salonId={salonId} date={selectedDate}
+                stylist={stylists.find(x => x.id === form.stylist)} service={getStylistService(form.stylist, form.service)}
+                defaults={{ name: form.name || (guestMe && guestMe.name) || "", phone: form.phone || (guestMe && guestMe.phone) || "", email: form.email || (guestMe && guestMe.email) || "" }} />
             )}
 
             {/* Vendég */}
@@ -3259,6 +3395,8 @@ function App() {
                     <button style={{...S.btnSec, background:C.accentText, color:C.accent, border:"none"}} onClick={() => setMovingBooking(null)}>Mégse</button>
                   </div>
                 )}
+
+                {staffMode && <AdminWaitlist S={S} C={C} salonId={salonId} date={adminDate} stylists={stylists} services={services} onlyStylistId={isStylist ? authStylistId : null} />}
 
                 <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", gap:"8px", flexWrap:"wrap", marginBottom:"10px"}}>
                   <div style={{fontSize:"10px", color:C.sub, letterSpacing:"0.05em"}}>💡 Foglalásra kattintva részletek · A "+" gombokkal új foglalás barberenként</div>
