@@ -1835,7 +1835,47 @@ function App() {
     }
   }
 
-  function deleteBooking(id) { setBookings(prev => prev.filter(b => b.id !== id)); setSelectedBooking(null); showToast("Törölve"); }
+  // ===== SZALON ÁLTALI MÓDOSÍTÁS / LEMONDÁS → vendég értesítése (booking-change, 2026-11-18) =====
+  // Áthelyezésnél az emlékeztető mindig újraindul (a szerver nullázza a reminder_mail_at-et), levél csak ha a munkatárs kéri.
+  function guestEmailFor(b) {
+    const c = clients.find(x => x.phone === b.clientPhone);
+    return String(b.clientEmail || (c && c.email) || "").trim();
+  }
+  function notifyBookingChange(kind, oldB, newB) {
+    if (!sb || !salonId || !staffMode) return;
+    const b = kind === "moved" ? newB : oldB;
+    if (!b || !b.date || b.date < formatDate(today)) return;
+    if (kind === "moved" && oldB && oldB.date === newB.date && oldB.time === newB.time && oldB.stylistId === newB.stylistId) return;
+    if (b.status && b.status !== "confirmed") return;
+    const email = guestEmailFor(b);
+    let notify = false;
+    if (email) {
+      notify = confirm(kind === "moved"
+        ? `✉️ Küldjünk értesítő emailt a vendégnek az új időpontról?\n\n${b.clientName} · ${email}\nRégi: ${fmtDayHu(oldB.date)} ${oldB.time} · ${oldB.stylist || ""}\nÚj: ${fmtDayHu(b.date)} ${b.time} · ${b.stylist || ""}\n\n(Mégse = nem küld levelet, pl. ha telefonon megbeszéltétek)`
+        : `✉️ Küldjünk lemondó emailt a vendégnek?\n\n${b.clientName} · ${email}\n${fmtDayHu(b.date)} ${b.time} · ${b.stylist || ""}\n\n(Mégse = nem küld levelet)`);
+    }
+    if (kind === "cancelled" && !notify) return;
+    const body = {
+      kind, salon: salonId, bookingId: String(b.id), notify, email,
+      booking: { date: b.date, time: b.time, stylist: b.stylist, service: b.service, duration: b.duration, price: b.price,
+                 clientName: b.clientName, clientPhone: b.clientPhone },
+      old: kind === "moved" && oldB ? { date: oldB.date, time: oldB.time, stylist: oldB.stylist } : undefined,
+    };
+    const send = () => sb.functions.invoke("booking-change", { body }).then(({ data, error }) => {
+      if (!notify) return;
+      if (error || !data || !data.ok) showToast("⚠️ Az értesítő levél nem ment ki", "error");
+      else if (data.mailed) showToast("✉️ Értesítő levél elküldve");
+      else showToast("Nincs email-cím, levél nem ment");
+    }).catch(() => { if (notify) showToast("⚠️ Az értesítő levél nem ment ki", "error"); });
+    // áthelyezésnél megvárjuk, hogy a módosítás felmenjen az adatbázisba
+    if (kind === "moved") setTimeout(send, 4000); else send();
+  }
+
+  function deleteBooking(id) {
+    const old = bookings.find(b => b.id === id);
+    setBookings(prev => prev.filter(b => b.id !== id)); setSelectedBooking(null); showToast("Törölve");
+    if (old) notifyBookingChange("cancelled", old, null);
+  }
 
   function saveEditedBooking() {
     if (!editingBooking) return;
@@ -1863,6 +1903,18 @@ function App() {
       // (ha ugyanaz a hely maradt, engedjük)
     }
 
+    const updated = orig ? {
+      ...orig,
+      date: eb.date,
+      time: eb.time,
+      stylistId: eb.stylistId,
+      stylist: stylist.name,
+      serviceId: eb.serviceId,
+      service: serviceChanged ? svc.name : (orig.service || svc.name),
+      price: serviceChanged ? svc.price : (orig.price ?? svc.price),
+      duration: dur,
+      note: eb.note,
+    } : null;
     setBookings(prev => prev.map(b => b.id === eb.id ? {
       ...b,
       date: eb.date,
@@ -1875,6 +1927,7 @@ function App() {
       duration: dur,
       note: eb.note,
     } : b));
+    if (orig && updated) notifyBookingChange("moved", orig, updated);
     setEditingBooking(null);
     setSelectedBooking(null);
     showToast("Foglalás módosítva");
@@ -1971,7 +2024,9 @@ function App() {
       if (!confirm(`Áthelyezed ide?\n\n${dragging.clientName}\n${dateStr} ${time} · ${stylist?.name}`)) { setDragging(null); return; }
     }
     setBookings(prev => prev.map(b => b.id === dragging.id ? {...b, date: dateStr, time, stylistId, stylist: stylist?.name || b.stylist} : b));
-    showToast("Áthelyezve"); setDragging(null);
+    showToast("Áthelyezve");
+    notifyBookingChange("moved", dragging, {...dragging, date: dateStr, time, stylistId, stylist: stylist?.name || dragging.stylist});
+    setDragging(null);
   }
 
   function openQuickBooking(date, time, stylistId) {
@@ -3621,6 +3676,7 @@ function App() {
                                       if (!confirm(`Áthelyezed ide?\n\n${movingBooking.clientName}\n${adminDate} ${time} · ${s.name}`)) return;
                                     }
                                     setBookings(prev => prev.map(b => b.id === movingBooking.id ? {...b, date: adminDate, time, stylistId: s.id, stylist: s.name} : b));
+                                    notifyBookingChange("moved", movingBooking, {...movingBooking, date: adminDate, time, stylistId: s.id, stylist: s.name});
                                     setMovingBooking(null);
                                     showToast("Áthelyezve");
                                     return;
@@ -3802,8 +3858,10 @@ function App() {
                                         showToast("Az időpont foglalt!", "error");
                                       } else {
                                         const doMove = () => {
-                                          setBookings(prev => prev.map(bk => bk.id === touchDragging.id ? {...bk, time: target.time, stylistId: target.stylistId, stylist: targetStylist?.name || bk.stylist} : bk));
+                                          const tdOld = touchDragging;
+                                          setBookings(prev => prev.map(bk => bk.id === tdOld.id ? {...bk, time: target.time, stylistId: target.stylistId, stylist: targetStylist?.name || bk.stylist} : bk));
                                           showToast("Áthelyezve");
+                                          notifyBookingChange("moved", tdOld, {...tdOld, time: target.time, stylistId: target.stylistId, stylist: targetStylist?.name || tdOld.stylist});
                                         };
                                         if (settings.confirmMoves) {
                                           if (confirm(`Áthelyezed ide?\n\n${touchDragging.clientName}\n${adminDate} ${target.time} · ${targetStylist?.name}`)) doMove();
